@@ -1,0 +1,152 @@
+{
+  "0269.jpg": {
+    "cells": [
+      {
+        "poly": [
+          770,
+          1193,
+          1082,
+          1192,
+          1077,
+          1252,
+          768,
+          1240
+        ],
+        "cate_id": 1,
+        "cate_text": "brand",
+        "vietocr_text": "NHABEXIMS",
+        "group_id": 1
+      },
+      {
+        "poly": [
+          1352,
+          1039,
+          2089,
+          1032,
+          2088,
+          1172,
+          1346,
+          1176
+        ],
+        "cate_id": 1,
+        "cate_text": "brand",
+        "vietocr_text": "NHABEXIMS",
+        "group_id": 1
+      },
+      {
+        "poly": [
+          656,
+          1376,
+          1960,
+          1308,
+          1805,
+          2067,
+          626,
+          2045
+        ],
+        "cate_id": 2,
+        "cate_text": "name",
+        "vietocr_text": "Khoai Lang SẤY",
+        "group_id": 2
+      },
+      {
+        "poly": [
+          2425,
+          927,
+          2493,
+          927,
+          2502,
+          1088,
+          2431,
+          1087
+        ],
+        "cate_id": 3,
+        "cate_text": "mfg_label",
+        "vietocr_text": "NSX:",
+        "group_id": 3
+      },
+      {
+        "poly": [
+          2433,
+          1091,
+          2508,
+          1091,
+          2544,
+          1612,
+          2459,
+          1612
+        ],
+        "cate_id": 4,
+        "cate_text": "mfg",
+        "vietocr_text": "25/11/2024",
+        "group_id": 3
+      },
+      {
+        "poly": [
+          2335,
+          922,
+          2414,
+          921,
+          2421,
+          1071,
+          2351,
+          1071
+        ],
+        "cate_id": 5,
+        "cate_text": "exp_label",
+        "vietocr_text": "HSD:",
+        "group_id": 4
+      },
+      {
+        "poly": [
+          2347,
+          1079,
+          2427,
+          1081,
+          2450,
+          1620,
+          2351,
+          1613
+        ],
+        "cate_id": 6,
+        "cate_text": "exp",
+        "vietocr_text": "25/11/2025",
+        "group_id": 4
+      },
+      {
+        "poly": [
+          2027,
+          3718,
+          2478,
+          3686,
+          2474,
+          3736,
+          2025,
+          3755
+        ],
+        "cate_id": 7,
+        "cate_text": "weight_label",
+        "vietocr_text": "KHỐI LƯỢNG TỊNH:",
+        "group_id": 5
+      },
+      {
+        "poly": [
+          2483,
+          3687,
+          2623,
+          3697,
+          2616,
+          3751,
+          2479,
+          3735
+        ],
+        "cate_id": 8,
+        "cate_text": "weight",
+        "vietocr_text": "100g",
+        "group_id": 5
+      }
+    ],
+    "h_origin": 3024,
+    "w_origin": 4032
+  }
+}
