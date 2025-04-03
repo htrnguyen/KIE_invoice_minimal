@@ -165,17 +165,22 @@ class GatedGCNNet(nn.Module):
             nn.Linear(out_dim, n_classes),
         )
 
-        # Move all layers to device
-        self.node_encoder = self.node_encoder.to(self.device)
-        self.edge_encoder = self.edge_encoder.to(self.device)
-        for layer in self.layers:
-            layer.to(self.device)
-        self.MLP_layer = self.MLP_layer.to(self.device)
+    def to(self, device):
+        super().to(device)
+        self.device = device
+        self.use_cuda = device.type == "cuda"
 
-        # Ensure LayoutXLM is on the correct device
-        for param in self.layoutxlm.parameters():
-            param.requires_grad = False
-            param.data = param.data.to(self.device)
+        # Move LayoutXLM to device
+        self.layoutxlm = self.layoutxlm.to(device)
+
+        # Move all other layers to device
+        self.node_encoder = self.node_encoder.to(device)
+        self.edge_encoder = self.edge_encoder.to(device)
+        for layer in self.layers:
+            layer.to(device)
+        self.MLP_layer = self.MLP_layer.to(device)
+
+        return self
 
     def forward(self, boxes, texts):
         batch_size = len(boxes)
