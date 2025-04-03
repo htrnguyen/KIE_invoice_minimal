@@ -209,12 +209,13 @@ class GatedGCNNet(nn.Module):
             # Convert tensor to list of strings
             text_list = []
             for j in range(n_nodes):
-                text = (
-                    texts[i][j].item()
-                    if isinstance(texts[i][j], torch.Tensor)
-                    else texts[i][j]
-                )
-                text_list.append(str(text))
+                # Convert tensor to string by joining all elements
+                text_tensor = texts[i][j]
+                if isinstance(text_tensor, torch.Tensor):
+                    text = " ".join([str(x.item()) for x in text_tensor])
+                else:
+                    text = str(text_tensor)
+                text_list.append(text)
 
             # Tokenize text
             text_inputs = self.tokenizer(
