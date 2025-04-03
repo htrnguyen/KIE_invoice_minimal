@@ -146,14 +146,20 @@ class GatedGCNNet(nn.Module):
 
         # Move model to device
         self.layoutxlm = self.layoutxlm.to(self.device)
+        self.tokenizer.model_max_length = 512
 
         # Node and edge encoders
-        self.node_encoder = nn.Linear(in_dim_node + hidden_dim, hidden_dim)
-        self.edge_encoder = nn.Linear(in_dim_edge, hidden_dim)
+        self.node_encoder = nn.Linear(in_dim_node + in_dim_text, hidden_dim).to(
+            self.device
+        )
+        self.edge_encoder = nn.Linear(in_dim_edge, hidden_dim).to(self.device)
 
         # GatedGCN layers
         self.layers = nn.ModuleList(
-            [GatedGCNLayer(hidden_dim, hidden_dim) for _ in range(n_layers)]
+            [
+                GatedGCNLayer(hidden_dim, hidden_dim).to(self.device)
+                for _ in range(n_layers)
+            ]
         )
 
         # Output layers
@@ -162,7 +168,7 @@ class GatedGCNNet(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(out_dim, n_classes),
-        )
+        ).to(self.device)
 
     def forward(self, boxes, texts):
         batch_size = len(boxes)
