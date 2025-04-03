@@ -299,13 +299,13 @@ def main():
         "in_feat_dropout": 0.1,
     }
 
-    model = GatedGCNNet(net_params).to(device)
+    # Create model and move to device
+    model = GatedGCNNet(net_params)
+    model = model.to(device)
 
     # Load pretrained weights
     pretrained_path = "weights/kie/vi_layoutxlm.pth"
     model = load_pretrained(model, pretrained_path)
-
-    model = model.to(device)
 
     # Create checkpoint directory
     checkpoint_dir = Path("weights/kie")
