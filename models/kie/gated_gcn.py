@@ -5,7 +5,7 @@ from torch.nn import LSTM
 from torch.nn.utils.rnn import pack_padded_sequence
 import dgl
 import dgl.function as fn
-from transformers import LayoutLMv3Model
+from transformers import LayoutLMv3Model, LayoutLMv3Tokenizer
 
 import numpy as np
 
@@ -45,29 +45,15 @@ class GatedGCNLayer(nn.Module):
     Gated GCN layer for node and edge feature update
     """
 
-    def __init__(
-        self, input_dim, output_dim, dropout=0.0, batch_norm=True, residual=True
-    ):
-        super().__init__()
-
-        self.in_channels = input_dim
-        self.out_channels = output_dim
-        self.dropout = dropout
-        self.batch_norm = batch_norm
-        self.residual = residual
-
-        if input_dim != output_dim:
-            self.residual = False
-
-        self.A = nn.Linear(input_dim, output_dim, bias=True)
-        self.B = nn.Linear(input_dim, output_dim, bias=True)
-        self.C = nn.Linear(input_dim, output_dim, bias=True)
-        self.D = nn.Linear(input_dim, output_dim, bias=True)
-        self.E = nn.Linear(input_dim, output_dim, bias=True)
-
-        if self.batch_norm:
-            self.bn_node_h = nn.BatchNorm1d(output_dim)
-            self.bn_node_e = nn.BatchNorm1d(output_dim)
+    def __init__(self, input_dim, output_dim):
+        super(GatedGCNLayer, self).__init__()
+        self.A = nn.Linear(input_dim, output_dim)
+        self.B = nn.Linear(input_dim, output_dim)
+        self.C = nn.Linear(input_dim, output_dim)
+        self.D = nn.Linear(input_dim, output_dim)
+        self.E = nn.Linear(input_dim, output_dim)
+        self.bn_node_h = nn.BatchNorm1d(output_dim)
+        self.bn_node_e = nn.BatchNorm1d(output_dim)
 
     def message_func(self, edges):
         Bh_j = edges.src["Bh"]
@@ -79,14 +65,13 @@ class GatedGCNLayer(nn.Module):
         Ah_i = nodes.data["Ah"]
         Bh_j = nodes.mailbox["Bh_j"]
         e = nodes.mailbox["e_ij"]
-        sigma = torch.sigmoid(e)
-        h = Ah_i + torch.sum(sigma * Bh_j, dim=1) / (torch.sum(sigma, dim=1) + 1e-6)
+        sigma_ij = torch.sigmoid(e)
+        h = Ah_i + torch.sum(sigma_ij * Bh_j, dim=1) / (
+            torch.sum(sigma_ij, dim=1) + 1e-6
+        )
         return {"h": h}
 
     def forward(self, g, h, e):
-        h_in = h
-        e_in = e
-
         g.ndata["h"] = h
         g.ndata["Ah"] = self.A(h)
         g.ndata["Bh"] = self.B(h)
@@ -94,25 +79,13 @@ class GatedGCNLayer(nn.Module):
         g.ndata["Eh"] = self.E(h)
         g.edata["e"] = e
         g.edata["Ce"] = self.C(e)
-
         g.update_all(self.message_func, self.reduce_func)
         h = g.ndata["h"]
         e = g.edata["e"]
-
-        if self.batch_norm:
-            h = self.bn_node_h(h)
-            e = self.bn_node_e(e)
-
+        h = self.bn_node_h(h)
+        e = self.bn_node_e(e)
         h = F.relu(h)
         e = F.relu(e)
-
-        if self.residual:
-            h = h_in + h
-            e = e_in + e
-
-        h = F.dropout(h, self.dropout, training=self.training)
-        e = F.dropout(e, self.dropout, training=self.training)
-
         return h, e
 
     def __repr__(self):
@@ -159,9 +132,9 @@ class GatedGCNNet(nn.Module):
 
         # LayoutXLM for text feature extraction
         self.layoutxlm = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
-        self.text_projection = nn.Linear(
-            768, hidden_dim
-        )  # 768 is LayoutXLM hidden size
+        self.tokenizer = LayoutLMv3Tokenizer.from_pretrained(
+            "microsoft/layoutlmv3-base"
+        )
 
         # Node and edge encoders
         self.node_encoder = nn.Linear(in_dim_node + hidden_dim, hidden_dim)
@@ -169,12 +142,7 @@ class GatedGCNNet(nn.Module):
 
         # GatedGCN layers
         self.layers = nn.ModuleList(
-            [
-                GatedGCNLayer(
-                    hidden_dim, hidden_dim, dropout, self.batch_norm, self.residual
-                )
-                for _ in range(n_layers)
-            ]
+            [GatedGCNLayer(hidden_dim, hidden_dim) for _ in range(n_layers)]
         )
 
         # Output layers
@@ -238,13 +206,16 @@ class GatedGCNNet(nn.Module):
             e_feats = torch.stack(e_feats)
 
             # Get text features from LayoutXLM
-            text_inputs = self.layoutxlm.tokenizer(
-                texts[i], padding=True, truncation=True, return_tensors="pt"
+            text_inputs = self.tokenizer(
+                texts[i],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
             ).to(self.device)
 
             text_outputs = self.layoutxlm(**text_inputs)
             text_feats = text_outputs.last_hidden_state[:, 0, :]  # Use [CLS] token
-            text_feats = self.text_projection(text_feats)
 
             # Node features: concatenate box coordinates and text features
             box_feats = boxes[i]
