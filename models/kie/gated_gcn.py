@@ -124,7 +124,7 @@ class GatedGCNNet(nn.Module):
                 # Test if DGL supports CUDA
                 test_graph = dgl.DGLGraph()
                 test_graph.add_nodes(1)
-                test_graph = test_graph.to(self.device)
+                test_graph = test_graph.to("cuda")
                 print("Using CUDA with DGL support")
             else:
                 print("Using CPU")
@@ -179,18 +179,18 @@ class GatedGCNNet(nn.Module):
 
     def to(self, device):
         super().to(device)
-        self.device = device
-        self.use_cuda = device.type == "cuda"
+        self.device = device if isinstance(device, str) else device.type
+        self.use_cuda = self.device == "cuda"
 
         # Move LayoutXLM to device
-        self.layoutxlm = self.layoutxlm.to(device)
+        self.layoutxlm = self.layoutxlm.to(self.device)
 
         # Move all other layers to device
-        self.node_encoder = self.node_encoder.to(device)
-        self.edge_encoder = self.edge_encoder.to(device)
+        self.node_encoder = self.node_encoder.to(self.device)
+        self.edge_encoder = self.edge_encoder.to(self.device)
         for layer in self.layers:
-            layer.to(device)
-        self.MLP_layer = self.MLP_layer.to(device)
+            layer.to(self.device)
+        self.MLP_layer = self.MLP_layer.to(self.device)
 
         return self
 

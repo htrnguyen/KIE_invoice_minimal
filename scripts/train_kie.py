@@ -295,7 +295,7 @@ def main():
         "readout": True,
         "batch_norm": True,
         "residual": True,
-        "device": device,
+        "device": device.type,  # Pass device type as string
         "in_feat_dropout": 0.1,
     }
 
