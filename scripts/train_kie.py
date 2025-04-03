@@ -339,7 +339,7 @@ def main():
 
     # Start training
     logging.info("Starting training...")
-    trainer.train(num_epochs=50, checkpoint_dir=checkpoint_dir)
+    trainer.train(num_epochs=5, checkpoint_dir=checkpoint_dir)
     logging.info("Training completed!")
 
 
