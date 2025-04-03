@@ -115,24 +115,8 @@ class GatedGCNNet(nn.Module):
 
     def __init__(self, net_params):
         super().__init__()
-        self.device = net_params["device"]
-
-        # Check if CUDA is available and DGL supports it
-        self.use_cuda = torch.cuda.is_available() and self.device == "cuda"
-        try:
-            if self.use_cuda:
-                # Test if DGL supports CUDA
-                test_graph = dgl.DGLGraph()
-                test_graph.add_nodes(1)
-                test_graph = test_graph.to("cuda")
-                print("Using CUDA with DGL support")
-            else:
-                print("Using CPU")
-                self.device = "cpu"
-        except Exception as e:
-            print(f"CUDA not available in DGL, falling back to CPU: {e}")
-            self.use_cuda = False
-            self.device = "cpu"
+        self.device = "cpu"  # Force CPU since DGL doesn't support CUDA
+        self.use_cuda = False
 
         in_dim_text = net_params["in_dim_text"]
         in_dim_node = net_params["in_dim_node"]
@@ -179,8 +163,8 @@ class GatedGCNNet(nn.Module):
 
     def to(self, device):
         super().to(device)
-        self.device = device if isinstance(device, str) else device.type
-        self.use_cuda = self.device == "cuda"
+        self.device = "cpu"  # Force CPU since DGL doesn't support CUDA
+        self.use_cuda = False
 
         # Move LayoutXLM to device
         self.layoutxlm = self.layoutxlm.to(self.device)
@@ -299,15 +283,7 @@ class GatedGCNNet(nn.Module):
 
         # Batch graphs
         batch_graph = dgl.batch(batch_graphs)
-
-        # Move graph to device if possible
-        try:
-            batch_graph = batch_graph.to(self.device)
-        except Exception as e:
-            print(f"Warning: Could not move graph to {self.device}, using CPU: {e}")
-            self.use_cuda = False
-            self.device = "cpu"
-            batch_graph = batch_graph.to(self.device)
+        batch_graph = batch_graph.to(self.device)
 
         # Concatenate features and ensure they are on the same device
         h = torch.cat(node_features, dim=0).to(self.device)
