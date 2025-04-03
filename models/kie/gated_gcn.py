@@ -117,12 +117,21 @@ class GatedGCNNet(nn.Module):
         super().__init__()
         self.device = net_params["device"]
 
-        # Check if CUDA is available
+        # Check if CUDA is available and DGL supports it
         self.use_cuda = torch.cuda.is_available() and self.device == "cuda"
-        if self.use_cuda:
-            print("Using CUDA")
-        else:
-            print("Using CPU")
+        try:
+            if self.use_cuda:
+                # Test if DGL supports CUDA
+                test_graph = dgl.DGLGraph()
+                test_graph.add_nodes(1)
+                test_graph = test_graph.to(self.device)
+                print("Using CUDA with DGL support")
+            else:
+                print("Using CPU")
+                self.device = "cpu"
+        except Exception as e:
+            print(f"CUDA not available in DGL, falling back to CPU: {e}")
+            self.use_cuda = False
             self.device = "cpu"
 
         in_dim_text = net_params["in_dim_text"]
@@ -287,8 +296,14 @@ class GatedGCNNet(nn.Module):
 
         # Batch graphs
         batch_graph = dgl.batch(batch_graphs)
+        # Only move to device if DGL supports it
         if self.use_cuda:
-            batch_graph = batch_graph.to(self.device)
+            try:
+                batch_graph = batch_graph.to(self.device)
+            except Exception as e:
+                print(f"Warning: Could not move graph to CUDA: {e}")
+                self.use_cuda = False
+                self.device = "cpu"
 
         # Concatenate features
         h = torch.cat(node_features, dim=0)
