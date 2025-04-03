@@ -1,0 +1,268 @@
+# Hướng dẫn đánh label thông tin sản phẩm (Labelme)
+
+- Run script: labelme --labels labels.txt
+
+## 1. Cấu trúc Labelme
+
+```json
+{
+  "version": "5.3.1",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "cate_text",      // Ánh xạ với category text
+      "points": [[x1,y1], [x2,y2], [x3,y3], [x4,y4]],  // Ánh xạ với poly
+      "group_id": number,        // Giữ nguyên group_id
+      "description": "vietocr_text",  // Ánh xạ với text được nhận dạng
+      "shape_type": "polygon",
+      "flags": {}
+    }
+  ],
+  "imagePath": "image_name.jpg",
+  "imageData": "base64_encoded_image",
+  "imageHeight": height,
+  "imageWidth": width
+}
+```
+
+## 2. Cấu trúc Category
+
+| Label (cate_text) | Mô tả                | Group ID | Ví dụ              |
+| ----------------- | -------------------- | -------- | ------------------ |
+| brand             | Thương hiệu sản phẩm | 0        | "HEO CAO BỒI"      |
+| name              | Tên sản phẩm         | 0        | "Thịt Viên 3 Phút" |
+| mfg_label         | Nhãn ngày sản xuất   | 1        | "NSX"              |
+| mfg               | Ngày sản xuất        | 1        | "150824-6-2 804"   |
+| exp_label         | Nhãn hạn sử dụng     | 2        | "HSD"              |
+| exp               | Hạn sử dụng          | 2        | "150825 13:28"     |
+| weight_label      | Nhãn khối lượng tịnh | 3        | "Khối lượng tịnh"  |
+| weight            | Khối lượng tịnh      | 3        | "200g"             |
+| other             | Thông tin khác       | 0        | "Đã nấu chín"      |
+
+## 3. Quy tắc Group ID
+
+- Group ID = 0: Các thông tin độc lập
+
+  - brand: Thương hiệu sản phẩm
+  - name: Tên sản phẩm
+  - other: Thông tin khác
+
+- Group ID = 1: Thông tin ngày sản xuất
+
+  - mfg_label: Nhãn "NSX" hoặc "Ngày sản xuất"
+  - mfg: Ngày sản xuất
+
+- Group ID = 2: Thông tin hạn sử dụng
+
+  - exp_label: Nhãn "HSD" hoặc "Hạn sử dụng"
+  - exp: Hạn sử dụng
+
+- Group ID = 3: Thông tin khối lượng
+  - weight_label: Nhãn "Khối lượng tịnh"
+  - weight: Giá trị khối lượng
+
+## 4. Quy tắc đánh label
+
+### 4.1. Thông tin cơ bản
+
+- brand: Đánh label riêng cho tên thương hiệu
+- name: Đánh label riêng cho tên sản phẩm
+- other: Đánh label cho các thông tin không thuộc các category khác
+
+### 4.2. Thông tin ngày sản xuất
+
+- mfg_label: Đánh label riêng cho nhãn "NSX" hoặc "Ngày sản xuất"
+- mfg: Đánh label riêng cho ngày sản xuất
+- Giữ nguyên định dạng ngày tháng như trên bao bì
+- Nếu có thêm thông tin về giờ, phút: đánh label chung với ngày tháng
+
+### 4.3. Thông tin hạn sử dụng
+
+- exp_label: Đánh label riêng cho nhãn "HSD" hoặc "Hạn sử dụng"
+- exp: Đánh label riêng cho hạn sử dụng
+- Giữ nguyên định dạng ngày tháng như trên bao bì
+- Nếu có thêm thông tin về giờ, phút: đánh label chung với ngày tháng
+
+### 4.4. Thông tin khối lượng
+
+- weight_label: Đánh label riêng cho nhãn "Khối lượng tịnh"
+- weight: Đánh label riêng cho giá trị khối lượng (bao gồm cả đơn vị)
+- Giữ nguyên định dạng số và đơn vị như trên bao bì
+
+## 5. Lưu ý quan trọng
+
+### 5.1. Bounding Box (points)
+
+- Đảm bảo points bao quanh chính xác vùng text
+- Không bỏ sót hoặc thừa ký tự
+- Với text bị nghiêng, vẽ polygon theo hướng nghiêng
+- Thứ tự points: top-left, top-right, bottom-right, bottom-left
+
+### 5.2. Text Recognition (description)
+
+- Giữ nguyên định dạng text như trên bao bì
+- Không chuẩn hóa hoặc sửa đổi text
+- Giữ nguyên khoảng cách và xuống dòng
+
+### 5.3. Group ID
+
+- Sử dụng group_id để liên kết các thành phần có liên quan
+- Đảm bảo các thành phần trong cùng một nhóm có cùng group_id
+- Không sử dụng group_id cho các thông tin độc lập
+
+### 5.4. Label (cate_text)
+
+- Chọn label phù hợp nhất cho mỗi thông tin
+- Nếu không chắc chắn, sử dụng label "other"
+- Đảm bảo tính nhất quán trong việc phân loại
+
+## 6. Ví dụ Labelme JSON
+
+```json
+{
+  "version": "5.3.1",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "brand",
+      "points": [
+        [100, 50],
+        [300, 50],
+        [300, 80],
+        [100, 80]
+      ],
+      "group_id": 0,
+      "description": "HEO CAO BỒI",
+      "shape_type": "polygon",
+      "flags": {}
+    },
+    {
+      "label": "name",
+      "points": [
+        [100, 100],
+        [400, 100],
+        [400, 130],
+        [100, 130]
+      ],
+      "group_id": 0,
+      "description": "Thịt Viên 3 Phút",
+      "shape_type": "polygon",
+      "flags": {}
+    },
+    {
+      "label": "weight_label",
+      "points": [
+        [100, 150],
+        [150, 150],
+        [150, 180],
+        [100, 180]
+      ],
+      "group_id": 3,
+      "description": "Khối lượng tịnh",
+      "shape_type": "polygon",
+      "flags": {}
+    },
+    {
+      "label": "weight",
+      "points": [
+        [160, 150],
+        [200, 150],
+        [200, 180],
+        [160, 180]
+      ],
+      "group_id": 3,
+      "description": "200g",
+      "shape_type": "polygon",
+      "flags": {}
+    }
+  ],
+  "imagePath": "product.jpg",
+  "imageHeight": 1024,
+  "imageWidth": 768
+}
+```
+
+## 2. Chuyển đổi định dạng
+
+Khi chuyển từ labelme sang định dạng cần thiết, thực hiện các bước sau:
+
+### 2.1. Cấu trúc đầu ra
+
+```json
+{
+  "image_name.jpg": {
+    "cells": [
+      {
+        "poly": [x1, y1, x2, y2, x3, y3, x4, y4],  // Chuyển từ points sang mảng 1 chiều
+        "cate_id": number,                          // Tăng tự động dựa trên label
+        "cate_text": "label",                       // Giữ nguyên từ label
+        "vietocr_text": "description",              // Giữ nguyên từ description
+        "group_id": number                          // Giữ nguyên từ group_id
+      }
+    ]
+  }
+}
+```
+
+### 2.2. Quy tắc chuyển đổi
+
+1. Tên file hình:
+
+   - Lấy từ `imagePath` trong file labelme
+   - Giữ nguyên tên file và phần mở rộng
+
+2. Points sang Poly:
+
+   - Chuyển từ mảng 2 chiều `[[x1,y1], [x2,y2], [x3,y3], [x4,y4]]`
+   - Thành mảng 1 chiều `[x1, y1, x2, y2, x3, y3, x4, y4]`
+   - Giữ nguyên thứ tự các điểm
+
+3. Category ID:
+
+   - Tăng tự động dựa trên label
+   - Ví dụ: brand=1, name=2, mfg_label=3, ...
+
+4. Category Text:
+
+   - Giữ nguyên giá trị từ trường `label`
+
+5. VietOCR Text:
+
+   - Giữ nguyên giá trị từ trường `description`
+
+6. Group ID:
+   - Giữ nguyên giá trị từ trường `group_id`
+
+### 2.3. Ví dụ chuyển đổi
+
+```json
+// Input (Labelme)
+{
+  "version": "5.3.1",
+  "shapes": [
+    {
+      "label": "brand",
+      "points": [[100, 50], [300, 50], [300, 80], [100, 80]],
+      "group_id": 0,
+      "description": "HEO CAO BỒI",
+      "shape_type": "polygon"
+    }
+  ],
+  "imagePath": "product.jpg"
+}
+
+// Output
+{
+  "product.jpg": {
+    "cells": [
+      {
+        "poly": [100, 50, 300, 50, 300, 80, 100, 80],
+        "cate_id": 1,
+        "cate_text": "brand",
+        "vietocr_text": "HEO CAO BỒI",
+        "group_id": 0
+      }
+    ]
+  }
+}
+```

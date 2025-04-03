@@ -1,0 +1,9 @@
+brand
+name
+mfg_label
+mfg
+exp_label
+exp
+weight_label
+weight
+other 
