@@ -39,6 +39,10 @@ class KIEDataset(Dataset):
 
     def encode_text(self, text):
         """Encode text thành vector sử dụng alphabet"""
+        if text is None:
+            # Return a sequence of zeros (padding) if text is None
+            return [0] * self.max_text_length
+
         text = text.upper()
         encoded = []
         for char in text[: self.max_text_length]:
