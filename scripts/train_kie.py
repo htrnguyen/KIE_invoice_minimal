@@ -270,6 +270,10 @@ def load_pretrained(model, pretrained_path):
     return model
 
 
+def load_config():
+    return {"classes": cf.node_labels, "alphabet": cf.alphabet}
+
+
 def main():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
