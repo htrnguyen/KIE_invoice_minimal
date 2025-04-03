@@ -46,7 +46,7 @@ class GatedGCNLayer(nn.Module):
     """
 
     def __init__(self, input_dim, output_dim):
-        super(GatedGCNLayer, self).__init__()
+        super().__init__()
         self.A = nn.Linear(input_dim, output_dim)
         self.B = nn.Linear(input_dim, output_dim)
         self.C = nn.Linear(input_dim, output_dim)
@@ -149,17 +149,12 @@ class GatedGCNNet(nn.Module):
         self.tokenizer.model_max_length = 512
 
         # Node and edge encoders
-        self.node_encoder = nn.Linear(in_dim_node + in_dim_text, hidden_dim).to(
-            self.device
-        )
-        self.edge_encoder = nn.Linear(in_dim_edge, hidden_dim).to(self.device)
+        self.node_encoder = nn.Linear(in_dim_node + in_dim_text, hidden_dim)
+        self.edge_encoder = nn.Linear(in_dim_edge, hidden_dim)
 
         # GatedGCN layers
         self.layers = nn.ModuleList(
-            [
-                GatedGCNLayer(hidden_dim, hidden_dim).to(self.device)
-                for _ in range(n_layers)
-            ]
+            [GatedGCNLayer(hidden_dim, hidden_dim) for _ in range(n_layers)]
         )
 
         # Output layers
@@ -168,7 +163,14 @@ class GatedGCNNet(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(out_dim, n_classes),
-        ).to(self.device)
+        )
+
+        # Move all layers to device
+        self.node_encoder = self.node_encoder.to(self.device)
+        self.edge_encoder = self.edge_encoder.to(self.device)
+        for layer in self.layers:
+            layer.to(self.device)
+        self.MLP_layer = self.MLP_layer.to(self.device)
 
     def forward(self, boxes, texts):
         batch_size = len(boxes)
@@ -207,14 +209,16 @@ class GatedGCNNet(nn.Module):
                     [
                         (box1[0] + box1[2] + box1[4] + box1[6]) / 4,
                         (box1[1] + box1[3] + box1[5] + box1[7]) / 4,
-                    ]
-                ).to(self.device)
+                    ],
+                    device=self.device,
+                )
                 center2 = torch.tensor(
                     [
                         (box2[0] + box2[2] + box2[4] + box2[6]) / 4,
                         (box2[1] + box2[3] + box2[5] + box2[7]) / 4,
-                    ]
-                ).to(self.device)
+                    ],
+                    device=self.device,
+                )
 
                 # Compute relative position
                 rel_pos = center2 - center1
@@ -263,7 +267,7 @@ class GatedGCNNet(nn.Module):
             text_feats = text_outputs.last_hidden_state[:, 0, :]  # Use [CLS] token
 
             # Node features: concatenate box coordinates and text features
-            box_feats = boxes[i]
+            box_feats = boxes[i].to(self.device)
             text_feats = text_feats.expand(n_nodes, -1)
             h_feats = torch.cat([box_feats, text_feats], dim=1)
 
