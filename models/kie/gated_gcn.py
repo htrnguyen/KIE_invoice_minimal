@@ -174,6 +174,9 @@ class GatedGCNNet(nn.Module):
             nn.Linear(out_dim, n_classes),
         )
 
+        # Move all layers to device
+        self.to(self.device)
+
     def to(self, device):
         super().to(device)
         self.device = device
@@ -296,18 +299,23 @@ class GatedGCNNet(nn.Module):
 
         # Batch graphs
         batch_graph = dgl.batch(batch_graphs)
-        # Only move to device if DGL supports it
-        if self.use_cuda:
-            try:
-                batch_graph = batch_graph.to(self.device)
-            except Exception as e:
-                print(f"Warning: Could not move graph to CUDA: {e}")
-                self.use_cuda = False
-                self.device = "cpu"
+
+        # Move graph to device if possible
+        try:
+            batch_graph = batch_graph.to(self.device)
+        except Exception as e:
+            print(f"Warning: Could not move graph to {self.device}, using CPU: {e}")
+            self.use_cuda = False
+            self.device = "cpu"
+            batch_graph = batch_graph.to(self.device)
 
         # Concatenate features
         h = torch.cat(node_features, dim=0)
         e = torch.cat(edge_features, dim=0)
+
+        # Ensure all tensors are on the same device as the graph
+        h = h.to(self.device)
+        e = e.to(self.device)
 
         # Initial node and edge encoders
         h = self.node_encoder(h)
