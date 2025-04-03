@@ -218,13 +218,13 @@ class GatedGCNNet(nn.Module):
                     text = str(text_tensor)
                 text_list.append(text)
 
-                # Prepare bounding box in [x0, y0, x1, y1] format
+                # Prepare bounding box in [x0, y0, x1, y1] format and convert to integers
                 box = boxes[i][j]
                 bbox = [
-                    min(box[0], box[2], box[4], box[6]),  # x0
-                    min(box[1], box[3], box[5], box[7]),  # y0
-                    max(box[0], box[2], box[4], box[6]),  # x1
-                    max(box[1], box[3], box[5], box[7]),  # y1
+                    int(min(box[0], box[2], box[4], box[6])),  # x0
+                    int(min(box[1], box[3], box[5], box[7])),  # y0
+                    int(max(box[0], box[2], box[4], box[6])),  # x1
+                    int(max(box[1], box[3], box[5], box[7])),  # y1
                 ]
                 bbox_list.append(bbox)
 
@@ -237,6 +237,9 @@ class GatedGCNNet(nn.Module):
                 truncation=True,
                 max_length=512,
             ).to(self.device)
+
+            # Ensure bounding boxes are long tensors
+            text_inputs["bbox"] = text_inputs["bbox"].long()
 
             text_outputs = self.layoutxlm(**text_inputs)
             text_feats = text_outputs.last_hidden_state[:, 0, :]  # Use [CLS] token
