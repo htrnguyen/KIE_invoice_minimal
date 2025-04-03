@@ -5,7 +5,7 @@ from torch.nn import LSTM
 from torch.nn.utils.rnn import pack_padded_sequence
 import dgl
 import dgl.function as fn
-from transformers import LayoutXLMModel
+from transformers import LayoutLMv3Model
 
 import numpy as np
 
@@ -158,7 +158,7 @@ class GatedGCNNet(nn.Module):
         self.in_feat_dropout = net_params["in_feat_dropout"]
 
         # LayoutXLM for text feature extraction
-        self.layoutxlm = LayoutXLMModel.from_pretrained("microsoft/layoutxlm-base")
+        self.layoutxlm = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
         self.text_projection = nn.Linear(
             768, hidden_dim
         )  # 768 is LayoutXLM hidden size
