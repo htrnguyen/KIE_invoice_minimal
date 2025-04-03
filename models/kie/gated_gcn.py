@@ -309,13 +309,9 @@ class GatedGCNNet(nn.Module):
             self.device = "cpu"
             batch_graph = batch_graph.to(self.device)
 
-        # Concatenate features
-        h = torch.cat(node_features, dim=0)
-        e = torch.cat(edge_features, dim=0)
-
-        # Ensure all tensors are on the same device as the graph
-        h = h.to(self.device)
-        e = e.to(self.device)
+        # Concatenate features and ensure they are on the same device
+        h = torch.cat(node_features, dim=0).to(self.device)
+        e = torch.cat(edge_features, dim=0).to(self.device)
 
         # Initial node and edge encoders
         h = self.node_encoder(h)
