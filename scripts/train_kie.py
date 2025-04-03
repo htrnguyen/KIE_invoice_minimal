@@ -271,37 +271,37 @@ def load_pretrained(model, pretrained_path):
 
 
 def main():
-    # Set random seeds
-    torch.manual_seed(42)
-    np.random.seed(42)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    # Initialize model
+    # Load config
+    config = load_config()
+
+    # Create model
     net_params = {
-        "in_dim_text": len(cf.alphabet),
-        "in_dim_node": 10,
-        "in_dim_edge": 2,
-        "hidden_dim": 512,
-        "out_dim": 384,
-        "n_classes": len(cf.node_labels),
-        "in_feat_dropout": 0.1,
-        "dropout": 0.0,
-        "L": 4,
+        "in_dim_text": 768,  # LayoutXLM hidden size
+        "in_dim_node": 8,  # 8 coordinates for each box
+        "in_dim_edge": 2,  # 2D relative position
+        "hidden_dim": 256,
+        "out_dim": 128,
+        "n_classes": len(config["classes"]),
+        "dropout": 0.1,
+        "L": 5,
         "readout": True,
-        "graph_norm": True,
         "batch_norm": True,
         "residual": True,
-        "device": cf.device,
+        "device": device,
+        "in_feat_dropout": 0.1,
     }
 
-    model = GatedGCNNet(net_params)
+    model = GatedGCNNet(net_params).to(device)
 
     # Load pretrained weights
     pretrained_path = "weights/kie/vi_layoutxlm.pth"
     model = load_pretrained(model, pretrained_path)
 
-    model = model.to(cf.device)
+    model = model.to(device)
 
     # Create checkpoint directory
     checkpoint_dir = Path("weights/kie")
@@ -324,7 +324,7 @@ def main():
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        device=cf.device,
+        device=device,
         learning_rate=0.0001,  # Lower learning rate for fine-tuning
         weight_decay=1e-4,
     )

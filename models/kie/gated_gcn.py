@@ -115,6 +115,15 @@ class GatedGCNNet(nn.Module):
 
     def __init__(self, net_params):
         super().__init__()
+        self.device = net_params["device"]
+
+        # Check if CUDA is available
+        self.use_cuda = torch.cuda.is_available() and self.device == "cuda"
+        if self.use_cuda:
+            print("Using CUDA")
+        else:
+            print("Using CPU")
+            self.device = "cpu"
 
         in_dim_text = net_params["in_dim_text"]
         in_dim_node = net_params["in_dim_node"]
@@ -127,7 +136,6 @@ class GatedGCNNet(nn.Module):
         self.readout = net_params["readout"]
         self.batch_norm = net_params["batch_norm"]
         self.residual = net_params["residual"]
-        self.device = net_params["device"]
         self.in_feat_dropout = net_params["in_feat_dropout"]
 
         # LayoutXLM for text feature extraction
@@ -135,6 +143,9 @@ class GatedGCNNet(nn.Module):
         self.tokenizer = LayoutLMv3Tokenizer.from_pretrained(
             "microsoft/layoutlmv3-base"
         )
+
+        # Move model to device
+        self.layoutxlm = self.layoutxlm.to(self.device)
 
         # Node and edge encoders
         self.node_encoder = nn.Linear(in_dim_node + hidden_dim, hidden_dim)
@@ -206,11 +217,9 @@ class GatedGCNNet(nn.Module):
             e_feats = torch.stack(e_feats)
 
             # Get text features from LayoutXLM
-            # Convert tensor to list of strings and prepare bounding boxes
             text_list = []
             bbox_list = []
             for j in range(n_nodes):
-                # Convert tensor to string by joining all elements
                 text_tensor = texts[i][j]
                 if isinstance(text_tensor, torch.Tensor):
                     text = " ".join([str(x.item()) for x in text_tensor])
@@ -218,7 +227,6 @@ class GatedGCNNet(nn.Module):
                     text = str(text_tensor)
                 text_list.append(text)
 
-                # Prepare bounding box in [x0, y0, x1, y1] format and convert to integers
                 box = boxes[i][j]
                 bbox = [
                     int(min(box[0], box[2], box[4], box[6])),  # x0
@@ -246,7 +254,6 @@ class GatedGCNNet(nn.Module):
 
             # Node features: concatenate box coordinates and text features
             box_feats = boxes[i]
-            # Expand text features to match number of nodes
             text_feats = text_feats.expand(n_nodes, -1)
             h_feats = torch.cat([box_feats, text_feats], dim=1)
 
@@ -255,7 +262,9 @@ class GatedGCNNet(nn.Module):
             edge_features.append(e_feats)
 
         # Batch graphs
-        batch_graph = dgl.batch(batch_graphs).to(self.device)
+        batch_graph = dgl.batch(batch_graphs)
+        if self.use_cuda:
+            batch_graph = batch_graph.to(self.device)
 
         # Concatenate features
         h = torch.cat(node_features, dim=0)
