@@ -1,7 +1,7 @@
 torch==1.13.1
 torchdata==0.5.1
 dgl==1.1.0
-transformers==4.21.0
+transformers>=4.41.0
 huggingface_hub>=0.14.1
 numpy>=1.21.0
 Pillow>=9.0.0
