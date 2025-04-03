@@ -172,6 +172,11 @@ class GatedGCNNet(nn.Module):
             layer.to(self.device)
         self.MLP_layer = self.MLP_layer.to(self.device)
 
+        # Ensure LayoutXLM is on the correct device
+        for param in self.layoutxlm.parameters():
+            param.requires_grad = False
+            param.data = param.data.to(self.device)
+
     def forward(self, boxes, texts):
         batch_size = len(boxes)
         batch_graphs = []
