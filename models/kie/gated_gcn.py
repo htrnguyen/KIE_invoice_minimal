@@ -206,8 +206,9 @@ class GatedGCNNet(nn.Module):
             e_feats = torch.stack(e_feats)
 
             # Get text features from LayoutXLM
-            # Convert tensor to list of strings
+            # Convert tensor to list of strings and prepare bounding boxes
             text_list = []
+            bbox_list = []
             for j in range(n_nodes):
                 # Convert tensor to string by joining all elements
                 text_tensor = texts[i][j]
@@ -217,9 +218,20 @@ class GatedGCNNet(nn.Module):
                     text = str(text_tensor)
                 text_list.append(text)
 
-            # Tokenize text
+                # Prepare bounding box in [x0, y0, x1, y1] format
+                box = boxes[i][j]
+                bbox = [
+                    min(box[0], box[2], box[4], box[6]),  # x0
+                    min(box[1], box[3], box[5], box[7]),  # y0
+                    max(box[0], box[2], box[4], box[6]),  # x1
+                    max(box[1], box[3], box[5], box[7]),  # y1
+                ]
+                bbox_list.append(bbox)
+
+            # Tokenize text with bounding boxes
             text_inputs = self.tokenizer(
                 text_list,
+                boxes=bbox_list,
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
