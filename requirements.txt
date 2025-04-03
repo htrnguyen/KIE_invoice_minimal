@@ -1,4 +1,4 @@
-torch==1.13.1
+torch==2.0.0
 torchdata==0.5.1
 dgl==1.1.0
 transformers>=4.41.0
