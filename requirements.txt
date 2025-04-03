@@ -1,5 +1,5 @@
-torch==2.5.1
-torchdata==0.7.0
+torch==2.0.1
+torchdata==0.6.0
 dgl==1.1.0
 transformers>=4.41.0
 huggingface_hub>=0.14.1
