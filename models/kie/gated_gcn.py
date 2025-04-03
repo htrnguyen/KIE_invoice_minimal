@@ -206,8 +206,10 @@ class GatedGCNNet(nn.Module):
             e_feats = torch.stack(e_feats)
 
             # Get text features from LayoutXLM
+            # Convert text to list of words
+            words = [text.split() for text in texts[i]]
             text_inputs = self.tokenizer(
-                texts[i],
+                words,
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
