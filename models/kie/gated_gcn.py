@@ -244,7 +244,11 @@ class GatedGCNNet(nn.Module):
                 padding=True,
                 truncation=True,
                 max_length=512,
-            ).to(self.device)
+            )
+
+            # Move all inputs to device
+            for key in text_inputs:
+                text_inputs[key] = text_inputs[key].to(self.device)
 
             # Ensure bounding boxes are long tensors
             text_inputs["bbox"] = text_inputs["bbox"].long()
