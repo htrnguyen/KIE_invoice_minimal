@@ -246,6 +246,8 @@ class GatedGCNNet(nn.Module):
 
             # Node features: concatenate box coordinates and text features
             box_feats = boxes[i]
+            # Expand text features to match number of nodes
+            text_feats = text_feats.expand(n_nodes, -1)
             h_feats = torch.cat([box_feats, text_feats], dim=1)
 
             batch_graphs.append(g)
