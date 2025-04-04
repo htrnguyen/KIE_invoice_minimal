@@ -363,8 +363,48 @@ class GatedGCNNet(nn.Module):
             # Expand text_feats to match box_feats batch size
             text_feats = text_feats.expand(box_feats.size(0), -1)
 
+            # Print shapes for debugging
+            print(f"box_feats shape: {box_feats.shape}")
+            print(f"text_feats shape: {text_feats.shape}")
+
+            # Ensure box_feats has the correct number of features
+            expected_box_features = 8  # in_dim_node
+            if box_feats.size(1) != expected_box_features:
+                # Pad or truncate box_feats to match expected features
+                if box_feats.size(1) < expected_box_features:
+                    # Pad with zeros
+                    padding = torch.zeros(
+                        box_feats.size(0),
+                        expected_box_features - box_feats.size(1),
+                        device=self.device,
+                    )
+                    box_feats = torch.cat([box_feats, padding], dim=1)
+                else:
+                    # Truncate
+                    box_feats = box_feats[:, :expected_box_features]
+
+            # Ensure text_feats has the correct number of features
+            expected_text_features = 768  # in_dim_text
+            if text_feats.size(1) != expected_text_features:
+                # Pad or truncate text_feats to match expected features
+                if text_feats.size(1) < expected_text_features:
+                    # Pad with zeros
+                    padding = torch.zeros(
+                        text_feats.size(0),
+                        expected_text_features - text_feats.size(1),
+                        device=self.device,
+                    )
+                    text_feats = torch.cat([text_feats, padding], dim=1)
+                else:
+                    # Truncate
+                    text_feats = text_feats[:, :expected_text_features]
+
             # Concatenate along feature dimension
             h_feats = torch.cat([box_feats, text_feats], dim=1)
+
+            # Print shape for debugging
+            print(f"h_feats shape: {h_feats.shape}")
+            print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
 
             batch_graphs.append(g)
             node_features.append(h_feats)
