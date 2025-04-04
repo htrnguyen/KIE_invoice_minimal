@@ -210,20 +210,29 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
         # Convert text to tensor
         text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long)
 
-        # Convert box to tensor
-        box_tensor = torch.tensor(box, dtype=torch.float32)
+        # Convert box to tensor and ensure it's a float tensor
+        if isinstance(box, np.ndarray):
+            box_tensor = torch.from_numpy(box).float()
+        else:
+            box_tensor = torch.tensor(box, dtype=torch.float32)
 
         batch_texts.append(text_tensor)
         batch_boxes.append(box_tensor)
 
-    # Create a single batch with all cells
-    boxes = [batch_boxes]  # List of lists of tensors
+    # Stack all boxes into a single tensor for the batch
+    batch_boxes = torch.stack(batch_boxes) if batch_boxes else torch.empty(0, 8)
+
+    # Create a single batch
+    boxes = [batch_boxes]  # List with a single tensor containing all boxes
     texts = [batch_texts]  # List of lists of tensors
 
     # Call the forward method with the correct arguments
     batch_scores = gcn_net.forward(boxes, texts)
 
-    return batch_scores, batch_boxes
+    # Return the original boxes for visualization
+    return batch_scores, [
+        b.numpy() if isinstance(b, torch.Tensor) else b for b in batch_boxes
+    ]
 
 
 @timer
