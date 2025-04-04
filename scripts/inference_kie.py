@@ -327,10 +327,18 @@ def visualize_results(
         # Đọc lại ảnh đã lưu và xoay nếu cần
         saved_img = cv2.imread(output_path)
         if saved_img is not None:
-            h, w = saved_img.shape[:2]
-            if w > h:  # Nếu ảnh đang nằm ngang
-                # Xoay 90 độ ngược chiều kim đồng hồ
-                rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            # Lấy kích thước ảnh gốc và ảnh đã lưu
+            orig_h, orig_w = orig_img.shape[:2]
+            saved_h, saved_w = saved_img.shape[:2]
+
+            # Kiểm tra hướng của ảnh gốc và ảnh đã lưu
+            orig_is_portrait = orig_h > orig_w
+            saved_is_portrait = saved_h > saved_w
+
+            # Xoay ảnh để khớp với hướng của ảnh gốc
+            if orig_is_portrait != saved_is_portrait:
+                # Xoay 90 độ theo chiều kim đồng hồ nếu cần
+                rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_CLOCKWISE)
                 cv2.imwrite(output_path, rotated_img)
                 print(f"Đã xoay và lưu ảnh tại: {output_path}")
             else:
@@ -348,9 +356,18 @@ def visualize_results(
             # Xoay ảnh nếu cần
             saved_img = cv2.imread(default_path)
             if saved_img is not None:
-                h, w = saved_img.shape[:2]
-                if w > h:
-                    rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                # Lấy kích thước ảnh gốc và ảnh đã lưu
+                orig_h, orig_w = orig_img.shape[:2]
+                saved_h, saved_w = saved_img.shape[:2]
+
+                # Kiểm tra hướng của ảnh gốc và ảnh đã lưu
+                orig_is_portrait = orig_h > orig_w
+                saved_is_portrait = saved_h > saved_w
+
+                # Xoay ảnh để khớp với hướng của ảnh gốc
+                if orig_is_portrait != saved_is_portrait:
+                    # Xoay 90 độ theo chiều kim đồng hồ nếu cần
+                    rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_CLOCKWISE)
                     cv2.imwrite(default_path, rotated_img)
                 print(f"Visualization saved to: {default_path}")
 
