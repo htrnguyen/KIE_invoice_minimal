@@ -53,9 +53,17 @@ def load_models():
 
     # Load text detection model (CRAFT)
     text_detector = CRAFT()
-    text_detector.load_state_dict(
-        torch.load(cf.text_detection_weights_path, map_location=torch.device(cf.device))
+    # Load state dict and remove 'module.' prefix if present
+    state_dict = torch.load(
+        cf.text_detection_weights_path, map_location=torch.device(cf.device)
     )
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("module."):
+            new_state_dict[k[7:]] = v  # Remove 'module.' prefix
+        else:
+            new_state_dict[k] = v
+    text_detector.load_state_dict(new_state_dict)
     text_detector = text_detector.to(cf.device)
     text_detector.eval()
 
