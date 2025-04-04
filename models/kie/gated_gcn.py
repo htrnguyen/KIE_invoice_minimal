@@ -72,12 +72,11 @@ class GatedGCNLayer(nn.Module):
         return {"h": h}
 
     def forward(self, g, h, e):
-        # Ensure graph is on CPU
-        g = g.to("cpu")
+        # Use the device of the input tensors
+        device = h.device
 
-        # Move features to CPU for DGL operations
-        h = h.to("cpu")
-        e = e.to("cpu")
+        # Move graph to the same device as tensors
+        g = g.to(device)
 
         g.ndata["h"] = h
         g.ndata["Ah"] = self.A(h)
@@ -97,10 +96,6 @@ class GatedGCNLayer(nn.Module):
 
         h = F.relu(h)
         e = F.relu(e)
-
-        # Move features back to original device
-        h = h.to(self.A.weight.device)
-        e = e.to(self.C.weight.device)
 
         return h, e
 
@@ -204,7 +199,7 @@ class GatedGCNNet(nn.Module):
         for i in range(batch_size):
             n_nodes = boxes[i].size(0)
 
-            # Create graph on CPU
+            # Create graph on the same device as the input tensors
             g = dgl.DGLGraph()
             g.add_nodes(n_nodes)
 

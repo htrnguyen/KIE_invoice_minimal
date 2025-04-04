@@ -46,20 +46,22 @@ from backend.kie.kie_utils import (
 
 def load_models():
     """Load all required models for the KIE pipeline"""
+    # Set device to CUDA if available, otherwise CPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
     # Load saliency model (U2Net)
     saliency_net = U2NET(3, 1)
     saliency_net.load_state_dict(
-        torch.load(cf.saliency_weight_path, map_location=torch.device(cf.device))
+        torch.load(cf.saliency_weight_path, map_location=device)
     )
-    saliency_net = saliency_net.to(cf.device)
+    saliency_net = saliency_net.to(device)
     saliency_net.eval()
 
     # Load text detection model (CRAFT)
     text_detector = CRAFT()
     # Load state dict and remove 'module.' prefix if present
-    state_dict = torch.load(
-        cf.text_detection_weights_path, map_location=torch.device(cf.device)
-    )
+    state_dict = torch.load(cf.text_detection_weights_path, map_location=device)
     new_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith("module."):
@@ -67,18 +69,18 @@ def load_models():
         else:
             new_state_dict[k] = v
     text_detector.load_state_dict(new_state_dict)
-    text_detector = text_detector.to(cf.device)
+    text_detector = text_detector.to(device)
     text_detector.eval()
 
     # Load text recognition model (VietOCR)
     config = Cfg.load_config_from_name("vgg_seq2seq")
     config["cnn"]["pretrained"] = False
-    config["device"] = cf.device
+    config["device"] = device.type
     config["predictor"]["beamsearch"] = False
     text_recognizer = Predictor(config)
 
     # Load KIE model (GatedGCNNet)
-    gcn_net = load_gate_gcn_net(cf.device, cf.kie_weight_path)
+    gcn_net = load_gate_gcn_net(device, cf.kie_weight_path)
 
     return saliency_net, text_detector, text_recognizer, gcn_net
 
@@ -95,7 +97,7 @@ def run_saliency(net, img):
     img_tensor = (
         torch.from_numpy(img_resized).permute(2, 0, 1).unsqueeze(0).float() / 255.0
     )
-    img_tensor = img_tensor.to(cf.device)
+    img_tensor = img_tensor.to(net.device)
 
     # Forward pass
     with torch.no_grad():
@@ -215,7 +217,7 @@ def process_image(
     # 5. Key Information Extraction
     print("\n3. Information Extraction")
     print("-" * 30)
-    batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
+    batch_scores, boxes = run_predict(gcn_net, merged_cells, device=gcn_net.device)
 
     # Post-process scores
     values, preds = postprocess_scores(

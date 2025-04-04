@@ -290,8 +290,9 @@ def load_config():
 
 
 def main():
-    # Set device to CPU since DGL doesn't support CUDA
-    device = torch.device("cpu")
+    # Set device to CUDA if available, otherwise CPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
     # Suppress warnings
     import warnings
@@ -314,7 +315,7 @@ def main():
         "readout": True,
         "batch_norm": True,
         "residual": True,
-        "device": "cpu",  # Force CPU since DGL doesn't support CUDA
+        "device": device.type,  # Use the detected device
         "in_feat_dropout": 0.1,
     }
 

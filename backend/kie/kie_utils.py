@@ -192,8 +192,8 @@ def prepare_graph(cells):
 
 @timer
 def run_predict(gcn_net, merged_cells, device="cpu"):
-    # Force CPU for DGL operations
-    dgl_device = "cpu"
+    # Use the device passed to the function
+    dgl_device = device
 
     # Prepare data for the model
     # The model expects a list of tensors for each batch
@@ -219,45 +219,43 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
 
     # Process each cell
     for cell in merged_cells:
-        # Extract text and box data
-        text = cell.get("vietocr_text", "")
+        # Get polygon coordinates
         poly = cell.get("poly", [])
-
         if isinstance(poly, np.ndarray):
             poly = poly.tolist()
 
-        # Normalize coordinates to 0-1000 range
-        normalized_poly = []
-        for i in range(0, len(poly), 2):
-            # Normalize x coordinate
-            x = int((poly[i] - x_min) * 1000 / (x_max - x_min))
-            # Normalize y coordinate
-            y = int((poly[i + 1] - y_min) * 1000 / (y_max - y_min))
-            normalized_poly.extend([x, y])
+        # Normalize coordinates
+        x_coords = [(x - x_min) / (x_max - x_min) for x in poly[0::2]]
+        y_coords = [(y - y_min) / (y_max - y_min) for y in poly[1::2]]
 
-        # Convert text to tensor
-        text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long)
+        # Create box features
+        box_feats = []
+        for i in range(len(x_coords)):
+            box_feats.extend([x_coords[i], y_coords[i]])
 
-        # Convert box to tensor
-        box_tensor = torch.tensor(normalized_poly, dtype=torch.float32)
+        # Add width and height
+        width = (max(x_coords) - min(x_coords)) if x_coords else 0
+        height = (max(y_coords) - min(y_coords)) if y_coords else 0
+        box_feats.extend([width, height])
 
-        batch_texts.append(text_tensor)
+        # Convert to tensor and add to batch
+        box_tensor = torch.tensor(box_feats, dtype=torch.float32).to(device)
         batch_boxes.append(box_tensor)
 
-    # Stack all boxes into a single tensor for the batch
-    batch_boxes = torch.stack(batch_boxes) if batch_boxes else torch.empty(0, 8)
+        # Process text
+        text = cell.get("vietocr_text", "")
+        text_encode = make_text_encode(text)
+        text_tensor = torch.tensor(text_encode, dtype=torch.long).to(device)
+        batch_texts.append(text_tensor)
 
-    # Create a single batch
-    boxes = [batch_boxes]  # List with a single tensor containing all boxes
-    texts = [batch_texts]  # List of lists of tensors
+    # Run inference
+    with torch.no_grad():
+        scores = gcn_net(batch_boxes, batch_texts)
 
-    # Call the forward method with the correct arguments
-    batch_scores = gcn_net.forward(boxes, texts)
+    # Convert scores to numpy for post-processing
+    scores = scores.cpu().numpy()
 
-    # Return the original boxes for visualization
-    return batch_scores, [
-        b.numpy() if isinstance(b, torch.Tensor) else b for b in batch_boxes
-    ]
+    return scores, batch_boxes
 
 
 @timer
