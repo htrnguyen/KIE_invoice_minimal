@@ -369,8 +369,6 @@ def main():
     print("\nStarting training...")
     print("=" * 50)
     trainer.train(num_epochs=20, checkpoint_dir=checkpoint_dir)
-    print("\nTraining completed!")
-    print("=" * 50)
 
 
 if __name__ == "__main__":
