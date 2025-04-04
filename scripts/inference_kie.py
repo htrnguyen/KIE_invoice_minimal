@@ -179,43 +179,17 @@ def process_image(
     print(f"Processing image: {image_path}")
     print(f"Image size: {img.shape}")
 
-    # 1. Background subtraction với bảo toàn thông tin
-    print("Step 1: Background processing...")
-    mask_img = run_saliency(saliency_net, img)
+    # 1. Chuẩn bị ảnh đầu vào
+    print("Step 1: Image preprocessing...")
+    # Chuyển đổi BGR sang RGB nếu cần
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        if img[0, 0, 0] > img[0, 0, 2]:  # Nếu kênh Blue > Red
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    # Tạo bản sao của ảnh gốc
-    processed_img = img.copy()
-
-    # Thay vì xóa background, chỉ làm mờ nhẹ background
-    if len(img.shape) == 3:  # Ảnh màu
-        # Tạo mask 3 kênh màu
-        mask_3d = np.stack([mask_img] * 3, axis=2)
-        # Tạo ảnh blend giữa ảnh gốc và background trắng
-        white_bg = np.ones_like(img) * 255
-        alpha = 0.1  # Độ mờ của background (0.1 = giữ 90% background)
-        processed_img = np.where(
-            mask_3d.astype(bool), img, img * alpha + white_bg * (1 - alpha)
-        )
-    else:  # Ảnh grayscale
-        white_bg = np.ones_like(img) * 255
-        alpha = 0.1
-        processed_img = np.where(
-            mask_img.astype(bool), img, img * alpha + white_bg * (1 - alpha)
-        )
-
-    # 2. Image alignment với ảnh đã xử lý
-    print("Step 2: Image alignment...")
-    warped_img = make_warp_img(processed_img, mask_img)
-
-    # Kiểm tra chất lượng ảnh sau alignment
-    if warped_img is None or warped_img.size == 0:
-        print("Warning: Alignment failed. Using processed image...")
-        warped_img = processed_img
-
-    # 3 & 4. Text detection và recognition
-    print("Step 3 & 4: Text detection and recognition...")
+    # 2. Text detection và recognition
+    print("Step 2: Text detection and recognition...")
     cells, heatmap, textboxes = run_ocr(
-        text_detector, text_recognizer, warped_img, cf.craft_config
+        text_detector, text_recognizer, img, cf.craft_config
     )
 
     # Lọc bỏ các box có kích thước quá nhỏ hoặc quá lớn
@@ -225,7 +199,7 @@ def process_image(
         box_w = np.max(poly[:, 0]) - np.min(poly[:, 0])
         box_h = np.max(poly[:, 1]) - np.min(poly[:, 1])
         area = box_w * box_h
-        img_area = warped_img.shape[0] * warped_img.shape[1]
+        img_area = img.shape[0] * img.shape[1]
 
         if 0.0001 * img_area < area < 0.1 * img_area:  # Lọc theo kích thước tương đối
             filtered_cells.append(cell)
@@ -242,11 +216,11 @@ def process_image(
     # Merge adjacent text-boxes
     group_ids = np.array([i["group_id"] for i in cells])
     merged_cells = create_merge_cells(
-        text_recognizer, warped_img, cells, group_ids, merge_text=cf.merge_text
+        text_recognizer, img, cells, group_ids, merge_text=cf.merge_text
     )
 
-    # 5. Key Information Extraction
-    print("Step 5: Key Information Extraction...")
+    # 3. Key Information Extraction
+    print("Step 3: Key Information Extraction...")
     batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
 
     # Post-process scores với confidence threshold
@@ -275,8 +249,8 @@ def process_image(
     print("Visualizing results...")
     visualize_results(
         img,
-        warped_img,
-        mask_img,
+        img,
+        None,
         filtered_results,
         filtered_preds,
         filtered_values,
@@ -284,15 +258,7 @@ def process_image(
         output_path,
     )
 
-    return (
-        kie_info,
-        img,
-        warped_img,
-        filtered_results,
-        filtered_preds,
-        filtered_values,
-        boxes,
-    )
+    return kie_info, img, img, filtered_results, filtered_preds, filtered_values, boxes
 
 
 def convert_warped_to_original_coords(warped_point, orig_img_shape, warped_img_shape):
