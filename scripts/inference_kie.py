@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from PIL import Image
 from pathlib import Path
+import argparse
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -93,89 +94,192 @@ def main():
         print(f"Error: Dataset directory not found at {dataset_path}")
         return
 
-    # Load annotations first to find a valid image
-    annotation_path = "data/dataset/annotations/val.json"
-    if not os.path.exists(annotation_path):
-        print(f"Error: Annotation file not found at {annotation_path}")
-        return
+    # Check if a specific image is requested
+    parser = argparse.ArgumentParser(description="Run inference on an image")
+    parser.add_argument(
+        "--image", type=str, help="Specific image to process (e.g., 0001.jpg)"
+    )
+    args = parser.parse_args()
 
-    with open(annotation_path, "r", encoding="utf-8") as f:
-        annotations = json.load(f)
-
-    # Find first image that exists in both annotations and images directory
-    image_files = [
-        f for f in os.listdir(dataset_path) if f.endswith((".jpg", ".png", ".jpeg"))
-    ]
-    valid_image = None
-    for image_file in image_files:
-        if any(ann["file_name"] == image_file for ann in annotations):
-            valid_image = image_file
-            break
-
-    if valid_image is None:
-        print("Error: No valid images found that have corresponding annotations")
-        return
-
-    image_path = os.path.join(dataset_path, valid_image)
-    print(f"Processing image: {image_path}")
-
-    try:
-        image, width, height = preprocess_image(image_path)
-        print(f"Image size: {width}x{height}")
-
-        # Find annotation for this image
-        annotation = next(
-            (ann for ann in annotations if ann["file_name"] == valid_image), None
-        )
-
-        if annotation is None:
-            print(f"Error: No annotation found for image {valid_image}")
+    if args.image:
+        # Process the specified image
+        image_path = os.path.join(dataset_path, args.image)
+        if not os.path.exists(image_path):
+            print(f"Error: Image file not found at {image_path}")
             return
 
-        # Extract boxes and texts from annotation
-        boxes = []
-        texts = []
-        for box in annotation["boxes"]:
-            # Convert normalized coordinates back to pixel coordinates
-            coords = np.array(box["poly"], dtype=np.float32)
-            coords[0::2] = coords[0::2] * width  # x coordinates
-            coords[1::2] = coords[1::2] * height  # y coordinates
-            boxes.append(coords.tolist())
+        print(f"Processing specified image: {image_path}")
 
-            # Encode text
-            text = box["text"]
-            if text is None:
-                text = ""
-            text = text.upper()
-            encoded = []
-            for char in text[:50]:  # max_text_length = 50
-                if char in cf.alphabet:
-                    encoded.append(cf.alphabet.index(char))
-                else:
-                    encoded.append(cf.alphabet.index(" "))
-            while len(encoded) < 50:
-                encoded.append(0)
-            texts.append(encoded)
+        try:
+            image, width, height = preprocess_image(image_path)
+            print(f"Image size: {width}x{height}")
 
-        # Perform inference
-        labels = predict(model, boxes, texts)
+            # For images without annotations, we need to extract boxes and texts
+            # This is a simplified example - in a real application, you would use OCR
+            # to extract text and bounding boxes from the image
 
-        # Print results
-        print("\nPrediction results:")
-        print("------------------")
-        for i, (box, label) in enumerate(zip(boxes, labels)):
-            print(f"Box {i+1}:")
-            print(f"  Coordinates: {box}")
-            print(f"  Text: {annotation['boxes'][i]['text']}")
-            print(f"  True label: {annotation['boxes'][i]['label']}")
-            print(f"  Predicted label: {label}")
+            # For demonstration, we'll create some example boxes and texts
+            # In a real application, you would replace this with actual OCR results
+            boxes = []
+            texts = []
+
+            # Example: Create a few boxes covering different regions of the image
+            # These are just examples - in a real application, you would use OCR
+            # to detect text regions
+            box1 = [0.1, 0.1, 0.3, 0.1, 0.3, 0.2, 0.1, 0.2]  # Normalized coordinates
+            box2 = [0.4, 0.3, 0.6, 0.3, 0.6, 0.4, 0.4, 0.4]
+            box3 = [0.2, 0.5, 0.8, 0.5, 0.8, 0.6, 0.2, 0.6]
+
+            # Convert normalized coordinates to pixel coordinates
+            box1_pixels = [
+                coord * width if i % 2 == 0 else coord * height
+                for i, coord in enumerate(box1)
+            ]
+            box2_pixels = [
+                coord * width if i % 2 == 0 else coord * height
+                for i, coord in enumerate(box2)
+            ]
+            box3_pixels = [
+                coord * width if i % 2 == 0 else coord * height
+                for i, coord in enumerate(box3)
+            ]
+
+            boxes.append(box1_pixels)
+            boxes.append(box2_pixels)
+            boxes.append(box3_pixels)
+
+            # Example texts (in a real application, these would come from OCR)
+            # For demonstration, we'll use placeholder texts
+            text1 = "EXAMPLE TEXT 1"
+            text2 = "EXAMPLE TEXT 2"
+            text3 = "EXAMPLE TEXT 3"
+
+            # Encode texts
+            def encode_text(text, max_length=50):
+                if text is None:
+                    return [0] * max_length
+
+                text = text.upper()
+                encoded = []
+                for char in text[:max_length]:
+                    if char in cf.alphabet:
+                        encoded.append(cf.alphabet.index(char))
+                    else:
+                        encoded.append(cf.alphabet.index(" "))
+                # Pad sequence
+                while len(encoded) < max_length:
+                    encoded.append(0)  # Padding with space
+                return encoded
+
+            texts.append(encode_text(text1))
+            texts.append(encode_text(text2))
+            texts.append(encode_text(text3))
+
+            # Perform inference
+            labels = predict(model, boxes, texts)
+
+            # Print results
+            print("\nPrediction results for image without annotations:")
+            print("---------------------------------------------")
+            for i, (box, text, label) in enumerate(
+                zip(boxes, [text1, text2, text3], labels)
+            ):
+                print(f"Box {i+1}:")
+                print(f"  Coordinates: {box}")
+                print(f"  Text: {text}")
+                print(f"  Predicted label: {label}")
+                print("---------------------------------------------")
+
+        except Exception as e:
+            print(f"Error processing image: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
+
+    else:
+        # Load annotations first to find a valid image
+        annotation_path = "data/dataset/annotations/val.json"
+        if not os.path.exists(annotation_path):
+            print(f"Error: Annotation file not found at {annotation_path}")
+            return
+
+        with open(annotation_path, "r", encoding="utf-8") as f:
+            annotations = json.load(f)
+
+        # Find first image that exists in both annotations and images directory
+        image_files = [
+            f for f in os.listdir(dataset_path) if f.endswith((".jpg", ".png", ".jpeg"))
+        ]
+        valid_image = None
+        for image_file in image_files:
+            if any(ann["file_name"] == image_file for ann in annotations):
+                valid_image = image_file
+                break
+
+        if valid_image is None:
+            print("Error: No valid images found that have corresponding annotations")
+            return
+
+        image_path = os.path.join(dataset_path, valid_image)
+        print(f"Processing image: {image_path}")
+
+        try:
+            image, width, height = preprocess_image(image_path)
+            print(f"Image size: {width}x{height}")
+
+            # Find annotation for this image
+            annotation = next(
+                (ann for ann in annotations if ann["file_name"] == valid_image), None
+            )
+
+            if annotation is None:
+                print(f"Error: No annotation found for image {valid_image}")
+                return
+
+            # Extract boxes and texts from annotation
+            boxes = []
+            texts = []
+            for box in annotation["boxes"]:
+                # Convert normalized coordinates back to pixel coordinates
+                coords = np.array(box["poly"], dtype=np.float32)
+                coords[0::2] = coords[0::2] * width  # x coordinates
+                coords[1::2] = coords[1::2] * height  # y coordinates
+                boxes.append(coords.tolist())
+
+                # Encode text
+                text = box["text"]
+                if text is None:
+                    text = ""
+                text = text.upper()
+                encoded = []
+                for char in text[:50]:  # max_text_length = 50
+                    if char in cf.alphabet:
+                        encoded.append(cf.alphabet.index(char))
+                    else:
+                        encoded.append(cf.alphabet.index(" "))
+                while len(encoded) < 50:
+                    encoded.append(0)
+                texts.append(encoded)
+
+            # Perform inference
+            labels = predict(model, boxes, texts)
+
+            # Print results
+            print("\nPrediction results:")
             print("------------------")
+            for i, (box, label) in enumerate(zip(boxes, labels)):
+                print(f"Box {i+1}:")
+                print(f"  Coordinates: {box}")
+                print(f"  Text: {annotation['boxes'][i]['text']}")
+                print(f"  True label: {annotation['boxes'][i]['label']}")
+                print(f"  Predicted label: {label}")
+                print("------------------")
 
-    except Exception as e:
-        print(f"Error processing image: {str(e)}")
-        import traceback
+        except Exception as e:
+            print(f"Error processing image: {str(e)}")
+            import traceback
 
-        traceback.print_exc()
+            traceback.print_exc()
 
 
 if __name__ == "__main__":
