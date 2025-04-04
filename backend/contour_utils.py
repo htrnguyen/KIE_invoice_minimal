@@ -86,7 +86,7 @@ def arrange_boxes(boxes, contours, contour_index, ratio, ratio_net=2):
     _, count = np.unique(line_idx, return_counts=True)
 
     start = 0
-    lines = np.zeros(boxes.shape[0], dtype=np.int)
+    lines = np.zeros(boxes.shape[0], dtype=np.int32)
     for i, c in enumerate(count):
         # Get boxes on the same line
         box_line = boxes[start : start + c]
