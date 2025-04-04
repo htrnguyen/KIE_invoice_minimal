@@ -368,7 +368,7 @@ def main():
 
     print("\nStarting training...")
     print("=" * 50)
-    trainer.train(num_epochs=5, checkpoint_dir=checkpoint_dir)
+    trainer.train(num_epochs=20, checkpoint_dir=checkpoint_dir)
     print("\nTraining completed!")
     print("=" * 50)
 
