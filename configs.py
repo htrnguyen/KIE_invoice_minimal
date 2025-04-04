@@ -1,34 +1,62 @@
 import os
+import torch
 
-device = "cuda"
+# Paths
+saliency_weight_path = "weights/saliency/u2netp.pth"
+text_detection_weights_path = "weights/text_detect/craft_mlt_25k.pth"
+kie_weight_path = "weights/kie/vi_layoutxlm.pth"
 
-img_dir = "./images"
-result_img_dir = "./results/model"
-raw_img_dir = "./results/raw"
-cropped_img_dir = "./results/crop"
+# Device
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-alphabet = " \"%&'()+,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyzÀÁÂÃÉÊÌÍÒÓÔÙÚÝàáâãèéêìíòóôõùúýĂăĐđĩŨũƠơƯưẠạẢảẤấẦầẨẩẫẬậẮắẰằẳẶặẹẺẻẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỶỷỸỹ"
+# Saliency detection
+saliency_ths = 0.5
 
-# Updated labels for information extraction
+# Text detection
+craft_config = {
+    "text_threshold": 0.7,
+    "low_text": 0.4,
+    "link_threshold": 0.4,
+    "canvas_size": 1024,
+    "mag_ratio": 2.0,
+    "poly": True,
+}
+
+# Text recognition
+vietocr_config = {
+    "cnn": {
+        "pretrained": False,
+    },
+    "predictor": {
+        "beamsearch": False,
+    },
+}
+
+# KIE
+score_ths = 0.5
+get_max = True
+merge_text = True
+
+# Node labels
 node_labels = [
-    "OTHER",
-    "BRAND",
     "NAME",
+    "BRAND",
     "MFG_LABEL",
     "MFG",
     "EXP_LABEL",
     "EXP",
     "WEIGHT_LABEL",
     "WEIGHT",
+    "OTHER",
 ]
 
-text_detection_weights_path = "./weights/text_detect/craft_mlt_25k_1.pth"
-saliency_weight_path = "./weights/saliency/u2netp.pth"
-kie_weight_path = "./weights/kie/kie_mcocr.pkl"
+# Alphabet for text encoding
+alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
 
-saliency_ths = 0.5
-score_ths = 0.82
-get_max = True  # get max score / filter predicted categories by score threshold
-merge_text = True  # if True, concatenate text contents from left to right
+img_dir = "./images"
+result_img_dir = "./results/model"
+raw_img_dir = "./results/raw"
+cropped_img_dir = "./results/crop"
+
 infer_batch_vietocr = True  # inference with batch
 visualize = False
