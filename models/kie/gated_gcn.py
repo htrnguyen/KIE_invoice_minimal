@@ -352,7 +352,18 @@ class GatedGCNNet(nn.Module):
 
             # Node features: concatenate box coordinates and text features
             box_feats = boxes[i].to(self.device)
-            text_feats = text_feats.expand(n_nodes, -1)
+            # Ensure box_feats is 2D tensor
+            if box_feats.dim() == 1:
+                box_feats = box_feats.view(1, -1)
+
+            # Ensure text_feats is 2D tensor
+            if text_feats.dim() == 1:
+                text_feats = text_feats.view(1, -1)
+
+            # Expand text_feats to match box_feats batch size
+            text_feats = text_feats.expand(box_feats.size(0), -1)
+
+            # Concatenate along feature dimension
             h_feats = torch.cat([box_feats, text_feats], dim=1)
 
             batch_graphs.append(g)
