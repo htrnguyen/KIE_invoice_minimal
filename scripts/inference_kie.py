@@ -270,16 +270,10 @@ def visualize_results(
 
     # Xoay ảnh về đúng chiều dọc nếu đang nằm ngang
     h, w = orig_img.shape[:2]
+    rotated = False
     if w > h:  # Nếu ảnh đang nằm ngang
         orig_img = cv2.rotate(orig_img, cv2.ROTATE_90_CLOCKWISE)
-        # Cập nhật lại tọa độ của các box
-        for cell in cells:
-            poly = cell["poly"]
-            for i in range(0, len(poly), 2):
-                x, y = poly[i], poly[i + 1]
-                # Xoay tọa độ 90 độ
-                poly[i] = y
-                poly[i + 1] = w - x
+        rotated = True
 
     # Create figure and axes với tỷ lệ phù hợp với ảnh
     h, w = orig_img.shape[:2]
@@ -306,7 +300,18 @@ def visualize_results(
     # Draw boxes and labels
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
-        poly = cell["poly"]
+        poly = cell["poly"].copy()  # Create a copy to avoid modifying original
+
+        if rotated:
+            # Xoay tọa độ 90 độ theo chiều kim đồng hồ
+            for j in range(0, len(poly), 2):
+                x, y = poly[j], poly[j + 1]
+                # Công thức chuyển đổi tọa độ khi xoay 90 độ CW:
+                # x_new = y
+                # y_new = h - x
+                poly[j] = y
+                poly[j + 1] = h - x
+
         x_coords = [poly[j] for j in range(0, len(poly), 2)]
         y_coords = [poly[j] for j in range(1, len(poly), 2)]
 
@@ -328,13 +333,19 @@ def visualize_results(
         text = cell.get("vietocr_text", "")
         label_text = f"{label}: {text} ({value:.2f})"
 
+        # Điều chỉnh vị trí text để không bị che khuất
+        text_x = min(x_coords)
+        text_y = min(y_coords) - 5  # Giảm khoảng cách với box
+
         ax.text(
-            min(x_coords),
-            min(y_coords) - 10,
+            text_x,
+            text_y,
             label_text,
             color=color,
-            fontsize=12,
-            bbox=dict(facecolor="black", alpha=0.7),
+            fontsize=8,  # Giảm kích thước font
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor=color, pad=0.5),
+            ha="left",
+            va="bottom",
         )
 
     plt.axis("off")
