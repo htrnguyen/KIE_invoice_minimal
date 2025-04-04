@@ -250,282 +250,119 @@ class GatedGCNNet(nn.Module):
         return self
 
     def forward(self, boxes, texts):
+        """
+        Forward pass của mô hình.
+        Args:
+            boxes: List các tensor chứa tọa độ các box
+            texts: List các tensor chứa text đã được encode
+        Returns:
+            Tensor chứa logits cho mỗi node
+        """
         batch_size = len(boxes)
-        batch_graphs = []
-        node_features = []
-        edge_features = []
+        device = boxes[0].device
 
-        # Process each sample in the batch
+        # Xử lý từng mẫu trong batch
+        all_node_features = []
+        all_edge_features = []
+        all_graphs = []
+
         for i in range(batch_size):
-            n_nodes = boxes[i].size(0)
+            num_nodes = boxes[i].size(0)
+            if num_nodes == 0:
+                continue
 
-            # Create graph on CPU (DGL không hỗ trợ CUDA)
-            g = dgl.DGLGraph()
-            g.add_nodes(n_nodes)
+            # Tạo node features từ boxes
+            node_features = boxes[i]  # [num_nodes, 8]
 
-            # Add self-loops
-            g.add_edges(g.nodes(), g.nodes())
+            # Tạo edge features từ tương đối vị trí
+            edge_features = []
+            edge_index = []
 
-            # Add edges between all nodes
-            src, dst = [], []
-            for i1 in range(n_nodes):
-                for i2 in range(n_nodes):
-                    if i1 != i2:
-                        src.append(i1)
-                        dst.append(i2)
-            g.add_edges(src, dst)
+            # Tính toán tương đối vị trí giữa các node
+            for j in range(num_nodes):
+                for k in range(num_nodes):
+                    if j != k:
+                        # Tính tương đối vị trí
+                        rel_pos = node_features[j, :2] - node_features[k, :2]  # [2]
+                        edge_features.append(rel_pos)
+                        edge_index.append([j, k])
 
-            # Compute edge features (relative spatial information)
-            e_feats = []
-            for s, d in zip(src + list(range(n_nodes)), dst + list(range(n_nodes))):
-                box1 = boxes[i][s].to(self.device)
-                box2 = boxes[i][d].to(self.device)
+            if not edge_features:  # Nếu không có edge nào
+                edge_features = torch.zeros((2, 2), device=device)  # Tạo 2 edge giả
+                edge_index = [[0, 1], [1, 0]]
 
-                # Calculate center points
-                if box1.dim() == 0:
-                    box1 = box1.view(1)
-                if box2.dim() == 0:
-                    box2 = box2.view(1)
+            edge_features = torch.stack(edge_features)  # [num_edges, 2]
+            edge_index = torch.tensor(edge_index, device=device).t()  # [2, num_edges]
 
-                try:
-                    center1 = torch.tensor(
-                        [
-                            (
-                                box1[0].item()
-                                + box1[2].item()
-                                + box1[4].item()
-                                + box1[6].item()
-                            )
-                            / 4,
-                            (
-                                box1[1].item()
-                                + box1[3].item()
-                                + box1[5].item()
-                                + box1[7].item()
-                            )
-                            / 4,
-                        ],
-                        device=self.device,
-                    )
-                    center2 = torch.tensor(
-                        [
-                            (
-                                box2[0].item()
-                                + box2[2].item()
-                                + box2[4].item()
-                                + box2[6].item()
-                            )
-                            / 4,
-                            (
-                                box2[1].item()
-                                + box2[3].item()
-                                + box2[5].item()
-                                + box2[7].item()
-                            )
-                            / 4,
-                        ],
-                        device=self.device,
-                    )
-                except (IndexError, AttributeError):
-                    center1 = torch.tensor([0.0, 0.0], device=self.device)
-                    center2 = torch.tensor([0.0, 0.0], device=self.device)
+            # Tạo DGL graph
+            g = dgl.graph((edge_index[0], edge_index[1]), num_nodes=num_nodes)
+            g.ndata["feat"] = node_features
+            g.edata["feat"] = edge_features
 
-                # Compute relative position
-                rel_pos = center2 - center1
-                e_feats.append(rel_pos)
-
-            e_feats = torch.stack(e_feats)
-
-            # Get text features from LayoutXLM
-            text_list = []
-            bbox_list = []
-            for j in range(n_nodes):
-                text_tensor = texts[i][j]
-                if isinstance(text_tensor, torch.Tensor):
-                    if text_tensor.dim() == 0:
-                        text = str(text_tensor.item())
-                    else:
-                        text = " ".join([str(x.item()) for x in text_tensor])
+            # Xử lý text features
+            text_features = []
+            for j in range(num_nodes):
+                # Kiểm tra kích thước của texts[i][j]
+                if texts[i][j].dim() == 0:  # Nếu là scalar
+                    text_tensor = texts[i][j].unsqueeze(0)  # Thêm dimension
                 else:
-                    text = str(text_tensor)
-                text_list.append(text)
+                    text_tensor = texts[i][j]
 
-                box = boxes[i][j].to(self.device)
-                if box.dim() == 0:
-                    box = box.view(1)
+                # Đảm bảo text_tensor có kích thước phù hợp
+                if text_tensor.size(0) < 2:
+                    # Nếu kích thước nhỏ hơn 2, thêm padding
+                    padding = torch.zeros(2 - text_tensor.size(0), device=device)
+                    text_tensor = torch.cat([text_tensor, padding])
 
-                try:
-                    bbox = [
-                        int(
-                            min(
-                                box[0].item(),
-                                box[2].item(),
-                                box[4].item(),
-                                box[6].item(),
-                            )
-                        ),
-                        int(
-                            min(
-                                box[1].item(),
-                                box[3].item(),
-                                box[5].item(),
-                                box[7].item(),
-                            )
-                        ),
-                        int(
-                            max(
-                                box[0].item(),
-                                box[2].item(),
-                                box[4].item(),
-                                box[6].item(),
-                            )
-                        ),
-                        int(
-                            max(
-                                box[1].item(),
-                                box[3].item(),
-                                box[5].item(),
-                                box[7].item(),
-                            )
-                        ),
-                    ]
-                except (IndexError, AttributeError):
-                    bbox = [0, 0, 100, 100]
+                # Lấy 2 phần tử đầu tiên
+                text_tensor = text_tensor[:2]
 
-                bbox_list.append(bbox)
+                # Thêm vào text_features
+                text_features.append(text_tensor)
 
-            # Tokenize text with bounding boxes
-            text_inputs = self.tokenizer(
-                text_list,
-                boxes=bbox_list,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=512,
-            )
+            text_features = torch.stack(text_features)  # [num_nodes, 2]
 
-            for key in text_inputs:
-                text_inputs[key] = text_inputs[key].to(self.device)
+            # Kết hợp node features và text features
+            node_features = torch.cat(
+                [node_features, text_features], dim=1
+            )  # [num_nodes, 10]
 
-            text_inputs["bbox"] = text_inputs["bbox"].long()
+            # Lưu features và graph
+            all_node_features.append(node_features)
+            all_edge_features.append(edge_features)
+            all_graphs.append(g)
 
-            text_outputs = self.layoutxlm(**text_inputs)
-            text_feats = text_outputs.last_hidden_state[:, 0, :]
+        if not all_node_features:  # Nếu không có mẫu nào
+            return torch.zeros((0, self.n_classes), device=device)
 
-            box_feats = boxes[i].to(self.device)
-            if box_feats.dim() == 1:
-                box_feats = box_feats.view(1, -1)
+        # Stack tất cả features
+        node_features = torch.cat(all_node_features, dim=0)  # [total_nodes, 10]
+        edge_features = torch.cat(all_edge_features, dim=0)  # [total_edges, 2]
 
-            if text_feats.dim() == 1:
-                text_feats = text_feats.view(1, -1)
+        # Tạo batch graph
+        batch_graph = dgl.batch(all_graphs)
 
-            text_feats = text_feats.expand(box_feats.size(0), -1)
+        # Forward qua GatedGCN layers
+        h = node_features
+        e = edge_features
 
-            expected_box_features = 8
-            if box_feats.size(1) != expected_box_features:
-                if box_feats.size(1) < expected_box_features:
-                    padding = torch.zeros(
-                        box_feats.size(0),
-                        expected_box_features - box_feats.size(1),
-                        device=self.device,
-                    )
-                    box_feats = torch.cat([box_feats, padding], dim=1)
-                else:
-                    box_feats = box_feats[:, :expected_box_features]
+        for layer in self.layers:
+            h, e = layer(batch_graph, h, e)
 
-            expected_text_features = 768
-            if text_feats.size(1) != expected_text_features:
-                if text_feats.size(1) < expected_text_features:
-                    padding = torch.zeros(
-                        text_feats.size(0),
-                        expected_text_features - text_feats.size(1),
-                        device=self.device,
-                    )
-                    text_feats = torch.cat([text_feats, padding], dim=1)
-                else:
-                    text_feats = text_feats[:, :expected_text_features]
+        # Global pooling
+        if self.readout == "sum":
+            h = dgl.sum_nodes(batch_graph, "feat")
+        elif self.readout == "max":
+            h = dgl.max_nodes(batch_graph, "feat")
+        elif self.readout == "mean":
+            h = dgl.mean_nodes(batch_graph, "feat")
+        else:
+            h = dgl.mean_nodes(batch_graph, "feat")
 
-            h_feats = torch.cat([box_feats, text_feats], dim=1)
+        # MLP layers
+        h = self.MLP_layer(h)
 
-            batch_graphs.append(g)
-            node_features.append(h_feats)
-            edge_features.append(e_feats)
-
-        # DGL luôn chạy trên CPU
-        batch_graph = dgl.batch(batch_graphs)
-        # Không cần chuyển batch_graph đến device vì DGL không hỗ trợ CUDA
-
-        h = torch.cat(node_features, dim=0).to(self.device)
-        e = torch.cat(edge_features, dim=0).to(self.device)
-
-        if h.size(0) != batch_graph.num_nodes():
-            h = h.view(batch_graph.num_nodes(), -1)
-
-        expected_features = self.node_encoder.weight.size(1)
-        if h.size(1) != expected_features:
-            if h.size(1) < expected_features:
-                padding = torch.zeros(
-                    h.size(0), expected_features - h.size(1), device=self.device
-                )
-                h = torch.cat([h, padding], dim=1)
-            else:
-                h = h[:, :expected_features]
-
-        # Tạo phiên bản CPU của các encoder
-        node_encoder_cpu = nn.Linear(
-            self.node_encoder.in_features, self.node_encoder.out_features
-        )
-        edge_encoder_cpu = nn.Linear(
-            self.edge_encoder.in_features, self.edge_encoder.out_features
-        )
-
-        # Sao chép trọng số từ các encoder gốc
-        node_encoder_cpu.weight.data = self.node_encoder.weight.data.clone().to("cpu")
-        if self.node_encoder.bias is not None:
-            node_encoder_cpu.bias.data = self.node_encoder.bias.data.clone().to("cpu")
-
-        edge_encoder_cpu.weight.data = self.edge_encoder.weight.data.clone().to("cpu")
-        if self.edge_encoder.bias is not None:
-            edge_encoder_cpu.bias.data = self.edge_encoder.bias.data.clone().to("cpu")
-
-        # Chuyển features về CPU để xử lý với DGL
-        h_cpu = h.to("cpu")
-        e_cpu = e.to("cpu")
-
-        # Initial node and edge encoders trên CPU
-        h_cpu = node_encoder_cpu(h_cpu)
-        e_cpu = edge_encoder_cpu(e_cpu)
-
-        # Apply dropout
-        h_cpu = F.dropout(h_cpu, self.in_feat_dropout, training=self.training)
-
-        # GatedGCN layers
-        for conv in self.layers:
-            h_cpu, e_cpu = conv(batch_graph, h_cpu, e_cpu)
-
-        # Tạo phiên bản CPU của MLP layer
-        mlp_layers = []
-        for layer in self.MLP_layer:
-            if isinstance(layer, nn.Linear):
-                linear_cpu = nn.Linear(layer.in_features, layer.out_features)
-                linear_cpu.weight.data = layer.weight.data.clone().to("cpu")
-                if layer.bias is not None:
-                    linear_cpu.bias.data = layer.bias.data.clone().to("cpu")
-                mlp_layers.append(linear_cpu)
-            elif isinstance(layer, nn.Dropout):
-                mlp_layers.append(nn.Dropout(layer.p))
-            else:
-                mlp_layers.append(layer)
-
-        # Output trên CPU
-        h_out_cpu = h_cpu
-        for layer in mlp_layers:
-            h_out_cpu = layer(h_out_cpu)
-
-        # Chuyển kết quả về device ban đầu
-        h_out = h_out_cpu.to(self.device)
-
-        return h_out
+        return h
 
     def loss(self, pred, label):
         criterion = nn.CrossEntropyLoss()
