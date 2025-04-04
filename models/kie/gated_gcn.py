@@ -227,13 +227,11 @@ class GatedGCNNet(nn.Module):
                 box2 = boxes[i][d].to(self.device)
 
                 # Calculate center points
-                # Ensure box1 and box2 are 1D tensors
                 if box1.dim() == 0:
                     box1 = box1.view(1)
                 if box2.dim() == 0:
                     box2 = box2.view(1)
 
-                # Extract coordinates safely
                 try:
                     center1 = torch.tensor(
                         [
@@ -274,7 +272,6 @@ class GatedGCNNet(nn.Module):
                         device=self.device,
                     )
                 except (IndexError, AttributeError):
-                    # Fallback if tensor access fails
                     center1 = torch.tensor([0.0, 0.0], device=self.device)
                     center2 = torch.tensor([0.0, 0.0], device=self.device)
 
@@ -290,7 +287,6 @@ class GatedGCNNet(nn.Module):
             for j in range(n_nodes):
                 text_tensor = texts[i][j]
                 if isinstance(text_tensor, torch.Tensor):
-                    # Handle 0-d tensor
                     if text_tensor.dim() == 0:
                         text = str(text_tensor.item())
                     else:
@@ -300,11 +296,9 @@ class GatedGCNNet(nn.Module):
                 text_list.append(text)
 
                 box = boxes[i][j].to(self.device)
-                # Ensure box is 1D tensor
                 if box.dim() == 0:
                     box = box.view(1)
 
-                # Extract coordinates safely
                 try:
                     bbox = [
                         int(
@@ -314,7 +308,7 @@ class GatedGCNNet(nn.Module):
                                 box[4].item(),
                                 box[6].item(),
                             )
-                        ),  # x0
+                        ),
                         int(
                             min(
                                 box[1].item(),
@@ -322,7 +316,7 @@ class GatedGCNNet(nn.Module):
                                 box[5].item(),
                                 box[7].item(),
                             )
-                        ),  # y0
+                        ),
                         int(
                             max(
                                 box[0].item(),
@@ -330,7 +324,7 @@ class GatedGCNNet(nn.Module):
                                 box[4].item(),
                                 box[6].item(),
                             )
-                        ),  # x1
+                        ),
                         int(
                             max(
                                 box[1].item(),
@@ -338,11 +332,10 @@ class GatedGCNNet(nn.Module):
                                 box[5].item(),
                                 box[7].item(),
                             )
-                        ),  # y1
+                        ),
                     ]
                 except (IndexError, AttributeError):
-                    # Fallback if tensor access fails
-                    bbox = [0, 0, 100, 100]  # Default bbox
+                    bbox = [0, 0, 100, 100]
 
                 bbox_list.append(bbox)
 
@@ -356,39 +349,26 @@ class GatedGCNNet(nn.Module):
                 max_length=512,
             )
 
-            # Move all inputs to device
             for key in text_inputs:
                 text_inputs[key] = text_inputs[key].to(self.device)
 
-            # Ensure bounding boxes are long tensors
             text_inputs["bbox"] = text_inputs["bbox"].long()
 
             text_outputs = self.layoutxlm(**text_inputs)
-            text_feats = text_outputs.last_hidden_state[:, 0, :]  # Use [CLS] token
+            text_feats = text_outputs.last_hidden_state[:, 0, :]
 
-            # Node features: concatenate box coordinates and text features
             box_feats = boxes[i].to(self.device)
-            # Ensure box_feats is 2D tensor
             if box_feats.dim() == 1:
                 box_feats = box_feats.view(1, -1)
 
-            # Ensure text_feats is 2D tensor
             if text_feats.dim() == 1:
                 text_feats = text_feats.view(1, -1)
 
-            # Expand text_feats to match box_feats batch size
             text_feats = text_feats.expand(box_feats.size(0), -1)
 
-            # Print shapes for debugging
-            print(f"box_feats shape: {box_feats.shape}")
-            print(f"text_feats shape: {text_feats.shape}")
-
-            # Ensure box_feats has the correct number of features
-            expected_box_features = 8  # in_dim_node
+            expected_box_features = 8
             if box_feats.size(1) != expected_box_features:
-                # Pad or truncate box_feats to match expected features
                 if box_feats.size(1) < expected_box_features:
-                    # Pad with zeros
                     padding = torch.zeros(
                         box_feats.size(0),
                         expected_box_features - box_feats.size(1),
@@ -396,15 +376,11 @@ class GatedGCNNet(nn.Module):
                     )
                     box_feats = torch.cat([box_feats, padding], dim=1)
                 else:
-                    # Truncate
                     box_feats = box_feats[:, :expected_box_features]
 
-            # Ensure text_feats has the correct number of features
-            expected_text_features = 768  # in_dim_text
+            expected_text_features = 768
             if text_feats.size(1) != expected_text_features:
-                # Pad or truncate text_feats to match expected features
                 if text_feats.size(1) < expected_text_features:
-                    # Pad with zeros
                     padding = torch.zeros(
                         text_feats.size(0),
                         expected_text_features - text_feats.size(1),
@@ -412,55 +388,32 @@ class GatedGCNNet(nn.Module):
                     )
                     text_feats = torch.cat([text_feats, padding], dim=1)
                 else:
-                    # Truncate
                     text_feats = text_feats[:, :expected_text_features]
 
-            # Concatenate along feature dimension
             h_feats = torch.cat([box_feats, text_feats], dim=1)
-
-            # Print shape for debugging
-            print(f"h_feats shape: {h_feats.shape}")
-            print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
 
             batch_graphs.append(g)
             node_features.append(h_feats)
             edge_features.append(e_feats)
 
-        # Batch graphs on CPU
         batch_graph = dgl.batch(batch_graphs)
-        # Keep batch_graph on CPU
         batch_graph = batch_graph.to("cpu")
 
-        # Concatenate features and ensure they are on the same device
         h = torch.cat(node_features, dim=0).to(self.device)
         e = torch.cat(edge_features, dim=0).to(self.device)
 
-        # Print shapes for debugging
-        print(f"h shape before reshape: {h.shape}")
-        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
-
-        # Ensure h has the correct shape
         if h.size(0) != batch_graph.num_nodes():
-            # Reshape h to match the number of nodes
             h = h.view(batch_graph.num_nodes(), -1)
 
-        # Ensure h has the correct number of features
-        expected_features = self.node_encoder.weight.size(1)  # 776
+        expected_features = self.node_encoder.weight.size(1)
         if h.size(1) != expected_features:
-            # Pad or truncate h to match expected features
             if h.size(1) < expected_features:
-                # Pad with zeros
                 padding = torch.zeros(
                     h.size(0), expected_features - h.size(1), device=self.device
                 )
                 h = torch.cat([h, padding], dim=1)
             else:
-                # Truncate
                 h = h[:, :expected_features]
-
-        # Print shapes for debugging
-        print(f"h shape after reshape: {h.shape}")
-        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
 
         # Initial node and edge encoders
         h = self.node_encoder(h)
