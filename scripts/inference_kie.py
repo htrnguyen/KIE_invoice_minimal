@@ -188,8 +188,7 @@ def process_image(
     print("=" * 50)
 
     # 1. Background subtraction
-    print("\n1. Background Removal & Text Detection")
-    print("-" * 30)
+    print("\n1. Processing Image")
     mask_img = run_saliency(saliency_net, img)
     img[~mask_img.astype(bool)] = 0.0
 
@@ -197,8 +196,7 @@ def process_image(
     warped_img = make_warp_img(img, mask_img)
 
     # 3 & 4. Text detection and recognition
-    print("\n2. Text Recognition")
-    print("-" * 30)
+    print("2. Detecting & Recognizing Text")
     cells, heatmap, textboxes = run_ocr(
         text_detector, text_recognizer, warped_img, cf.craft_config
     )
@@ -213,8 +211,7 @@ def process_image(
     )
 
     # 5. Key Information Extraction
-    print("\n3. Information Extraction")
-    print("-" * 30)
+    print("3. Extracting Information")
     batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
 
     # Post-process scores
@@ -224,17 +221,33 @@ def process_image(
     kie_info = postprocess_write_info(merged_cells, preds)
 
     # Display results
-    print("\nExtracted Information:")
-    print("-" * 30)
-    for key, value in kie_info.items():
-        print(f"{key}: {value}")
+    print("\nResults:")
+    print("-" * 50)
+
+    # Hiển thị các detection có confidence > 0.3
+    high_conf_results = []
+    for cell, pred, value in zip(merged_cells, preds, values):
+        if value > 0.3:  # Chỉ hiển thị các kết quả có độ tin cậy > 0.3
+            label = cf.node_labels[pred]
+            text = cell.get("vietocr_text", "")
+            high_conf_results.append((label, text, value))
+
+    # Sắp xếp kết quả theo độ tin cậy giảm dần
+    high_conf_results.sort(key=lambda x: x[2], reverse=True)
+
+    # Hiển thị kết quả
+    if high_conf_results:
+        for label, text, conf in high_conf_results:
+            print(f"{label}: {text} (confidence: {conf:.2f})")
+    else:
+        print("No high confidence detections found.")
 
     # Visualize results
-    print("\nVisualizing Results:")
-    print("-" * 30)
+    print("\nSaving visualization...")
     visualize_results(
         img, warped_img, mask_img, merged_cells, preds, values, boxes, output_path
     )
+    print(f"Results saved to: {output_path}")
 
     return kie_info, img, warped_img, merged_cells, preds, values, boxes
 
@@ -389,7 +402,7 @@ def main():
         image_path = args.image
         output_path = args.output if args.output else "visualization_result.png"
 
-        kie_info, orig_img, warped_img, cells, preds, values, boxes = process_image(
+        process_image(
             image_path,
             saliency_net,
             text_detector,
@@ -427,7 +440,7 @@ def main():
         image_path = os.path.join(dataset_path, valid_image)
         output_path = args.output if args.output else "visualization_result.png"
 
-        kie_info, orig_img, warped_img, cells, preds, values, boxes = process_image(
+        process_image(
             image_path,
             saliency_net,
             text_detector,
