@@ -51,7 +51,7 @@ class GatedGCNLayer(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.dropout = dropout
+        self.dropout_rate = dropout
         self.batch_norm = batch_norm
         self.residual = residual
 
@@ -65,7 +65,7 @@ class GatedGCNLayer(nn.Module):
             self.bn_node_h = nn.BatchNorm1d(output_dim)
             self.bn_node_e = nn.BatchNorm1d(output_dim)
 
-        self.dropout = nn.Dropout(dropout)
+        self.dropout_layer = nn.Dropout(dropout)
 
     def message_func(self, edges):
         Bh_j = edges.src["Bh"]
@@ -160,9 +160,9 @@ class GatedGCNLayer(nn.Module):
         e = F.relu(e)
 
         # Áp dụng dropout nếu cần
-        if self.dropout > 0:
-            h = self.dropout(h)
-            e = self.dropout(e)
+        if self.dropout_rate > 0:
+            h = self.dropout_layer(h)
+            e = self.dropout_layer(e)
 
         # Áp dụng residual connection nếu cần
         if self.residual and self.input_dim == self.output_dim:
@@ -494,13 +494,17 @@ class GatedGCNNet(nn.Module):
 
         # Điền kết quả vào tensor
         start_idx = 0
+        current_batch_idx = 0
         for i, count in enumerate(original_node_counts):
             # Nếu có node giả, chỉ lấy kết quả cho node thật
             if i in fake_node_indices:
-                result[start_idx : start_idx + count] = h[i][:count]
+                # Lấy kết quả cho node thật (bỏ qua node giả)
+                result[start_idx : start_idx + count] = h[current_batch_idx][:count]
             else:
-                result[start_idx : start_idx + count] = h[i]
+                # Lấy toàn bộ kết quả cho batch này
+                result[start_idx : start_idx + count] = h[current_batch_idx]
             start_idx += count
+            current_batch_idx += 1
 
         return result
 
