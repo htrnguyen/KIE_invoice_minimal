@@ -378,6 +378,11 @@ class GatedGCNNet(nn.Module):
         h = torch.cat(node_features, dim=0).to(self.device)
         e = torch.cat(edge_features, dim=0).to(self.device)
 
+        # Ensure h has the correct shape
+        if h.size(0) != batch_graph.num_nodes():
+            # Reshape h to match the number of nodes
+            h = h.view(batch_graph.num_nodes(), -1)
+
         # Initial node and edge encoders
         h = self.node_encoder(h)
         e = self.edge_encoder(e)
