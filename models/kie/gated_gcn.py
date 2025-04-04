@@ -379,10 +379,10 @@ class GatedGCNNet(nn.Module):
         batch_graph = dgl.batch(all_graphs)
 
         # Kiểm tra kích thước của node_features và edge_features
-        print(f"node_features shape: {node_features.shape}")
-        print(f"edge_features shape: {edge_features.shape}")
-        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
-        print(f"edge_encoder weight shape: {self.edge_encoder.weight.shape}")
+        # print(f"node_features shape: {node_features.shape}")
+        # print(f"edge_features shape: {edge_features.shape}")
+        # print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
+        # print(f"edge_encoder weight shape: {self.edge_encoder.weight.shape}")
 
         # Điều chỉnh kích thước của node_features để phù hợp với node_encoder
         # Nếu kích thước không khớp, tạo một layer mới với kích thước phù hợp
