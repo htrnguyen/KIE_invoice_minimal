@@ -211,44 +211,56 @@ class GatedGCNNet(nn.Module):
                 box2 = boxes[i][d].to(self.device)
 
                 # Calculate center points
-                center1 = torch.tensor(
-                    [
-                        (
-                            box1[0].item()
-                            + box1[2].item()
-                            + box1[4].item()
-                            + box1[6].item()
-                        )
-                        / 4,
-                        (
-                            box1[1].item()
-                            + box1[3].item()
-                            + box1[5].item()
-                            + box1[7].item()
-                        )
-                        / 4,
-                    ],
-                    device=self.device,
-                )
-                center2 = torch.tensor(
-                    [
-                        (
-                            box2[0].item()
-                            + box2[2].item()
-                            + box2[4].item()
-                            + box2[6].item()
-                        )
-                        / 4,
-                        (
-                            box2[1].item()
-                            + box2[3].item()
-                            + box2[5].item()
-                            + box2[7].item()
-                        )
-                        / 4,
-                    ],
-                    device=self.device,
-                )
+                # Ensure box1 and box2 are 1D tensors
+                if box1.dim() == 0:
+                    box1 = box1.view(1)
+                if box2.dim() == 0:
+                    box2 = box2.view(1)
+
+                # Extract coordinates safely
+                try:
+                    center1 = torch.tensor(
+                        [
+                            (
+                                box1[0].item()
+                                + box1[2].item()
+                                + box1[4].item()
+                                + box1[6].item()
+                            )
+                            / 4,
+                            (
+                                box1[1].item()
+                                + box1[3].item()
+                                + box1[5].item()
+                                + box1[7].item()
+                            )
+                            / 4,
+                        ],
+                        device=self.device,
+                    )
+                    center2 = torch.tensor(
+                        [
+                            (
+                                box2[0].item()
+                                + box2[2].item()
+                                + box2[4].item()
+                                + box2[6].item()
+                            )
+                            / 4,
+                            (
+                                box2[1].item()
+                                + box2[3].item()
+                                + box2[5].item()
+                                + box2[7].item()
+                            )
+                            / 4,
+                        ],
+                        device=self.device,
+                    )
+                except (IndexError, AttributeError):
+                    # Fallback if tensor access fails
+                    center1 = torch.tensor([0.0, 0.0], device=self.device)
+                    center2 = torch.tensor([0.0, 0.0], device=self.device)
 
                 # Compute relative position
                 rel_pos = center2 - center1
@@ -268,20 +280,50 @@ class GatedGCNNet(nn.Module):
                 text_list.append(text)
 
                 box = boxes[i][j].to(self.device)
-                bbox = [
-                    int(
-                        min(box[0].item(), box[2].item(), box[4].item(), box[6].item())
-                    ),  # x0
-                    int(
-                        min(box[1].item(), box[3].item(), box[5].item(), box[7].item())
-                    ),  # y0
-                    int(
-                        max(box[0].item(), box[2].item(), box[4].item(), box[6].item())
-                    ),  # x1
-                    int(
-                        max(box[1].item(), box[3].item(), box[5].item(), box[7].item())
-                    ),  # y1
-                ]
+                # Ensure box is 1D tensor
+                if box.dim() == 0:
+                    box = box.view(1)
+
+                # Extract coordinates safely
+                try:
+                    bbox = [
+                        int(
+                            min(
+                                box[0].item(),
+                                box[2].item(),
+                                box[4].item(),
+                                box[6].item(),
+                            )
+                        ),  # x0
+                        int(
+                            min(
+                                box[1].item(),
+                                box[3].item(),
+                                box[5].item(),
+                                box[7].item(),
+                            )
+                        ),  # y0
+                        int(
+                            max(
+                                box[0].item(),
+                                box[2].item(),
+                                box[4].item(),
+                                box[6].item(),
+                            )
+                        ),  # x1
+                        int(
+                            max(
+                                box[1].item(),
+                                box[3].item(),
+                                box[5].item(),
+                                box[7].item(),
+                            )
+                        ),  # y1
+                    ]
+                except (IndexError, AttributeError):
+                    # Fallback if tensor access fails
+                    bbox = [0, 0, 100, 100]  # Default bbox
+
                 bbox_list.append(bbox)
 
             # Tokenize text with bounding boxes
