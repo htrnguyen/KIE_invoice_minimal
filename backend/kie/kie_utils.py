@@ -195,41 +195,27 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
     # Force CPU for DGL operations
     dgl_device = "cpu"
 
-    (
-        batch_graphs,
-        batch_x,
-        batch_e,
-        batch_snorm_n,
-        batch_snorm_e,
-        text,
-        text_length,
-        boxes,
-        graph_node_size,
-        graph_edge_size,
-    ) = prepare_graph(merged_cells)
+    # Prepare data for the model
+    texts = []
+    boxes = []
 
-    # Move graph to CPU first, then to the target device if needed
-    batch_graphs = batch_graphs.to(dgl_device)
-    batch_x = batch_x.to(device)
-    batch_e = batch_e.to(device)
+    for cell in merged_cells:
+        # Extract text and box data
+        text = cell.get("vietocr_text", "")
+        box = cell.get("poly", [])
 
-    text = text.to(device)
-    text_length = text_length.to(device)
-    batch_snorm_e = batch_snorm_e.to(device)
-    batch_snorm_n = batch_snorm_n.to(device)
+        # Convert text to tensor
+        text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long)
 
-    # No need to move batch_graphs again, it's already on CPU
-    batch_scores = gcn_net.forward(
-        batch_graphs,
-        batch_x,
-        batch_e,
-        text,
-        text_length,
-        batch_snorm_n,
-        batch_snorm_e,
-        graph_node_size,
-        graph_edge_size,
-    )
+        # Convert box to tensor
+        box_tensor = torch.tensor(box, dtype=torch.float32)
+
+        texts.append(text_tensor)
+        boxes.append(box_tensor)
+
+    # Call the forward method with the correct arguments
+    batch_scores = gcn_net.forward(boxes, texts)
+
     return batch_scores, boxes
 
 
