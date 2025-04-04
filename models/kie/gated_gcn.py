@@ -378,6 +378,11 @@ class GatedGCNNet(nn.Module):
         # Tạo batch graph trên CPU
         batch_graph = dgl.batch(all_graphs)
 
+        # Chuyển đổi kích thước node_features và edge_features để phù hợp với các layer
+        # Sử dụng node_encoder và edge_encoder để chuyển đổi kích thước
+        node_features = self.node_encoder(node_features)  # [total_nodes, hidden_dim]
+        edge_features = self.edge_encoder(edge_features)  # [total_edges, hidden_dim]
+
         # Forward qua GatedGCN layers
         h = node_features
         e = edge_features
