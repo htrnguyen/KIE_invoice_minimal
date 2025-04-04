@@ -73,28 +73,94 @@ def predict(model, boxes, texts, device="cpu"):
 def main():
     # Load model
     checkpoint_path = "weights/kie/model_best.pth"
+    if not os.path.exists(checkpoint_path):
+        print(f"Error: Checkpoint file not found at {checkpoint_path}")
+        return
+
     model = load_model(checkpoint_path)
 
-    # Example usage
-    image_path = "path/to/your/image.jpg"  # Replace with your image path
-    image, width, height = preprocess_image(image_path)
+    # Load a sample image from the dataset
+    dataset_path = "data/dataset/images"
+    if not os.path.exists(dataset_path):
+        print(f"Error: Dataset directory not found at {dataset_path}")
+        return
 
-    # Example boxes and texts (replace with your actual data)
-    boxes = [
-        [100, 100, 200, 100, 200, 150, 100, 150],  # Example box coordinates
-        [300, 200, 400, 200, 400, 250, 300, 250],
+    # Get list of images
+    image_files = [
+        f for f in os.listdir(dataset_path) if f.endswith((".jpg", ".png", ".jpeg"))
     ]
+    if not image_files:
+        print(f"Error: No images found in {dataset_path}")
+        return
 
-    texts = [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]]  # Example text encodings
+    # Use the first image
+    image_path = os.path.join(dataset_path, image_files[0])
+    print(f"Processing image: {image_path}")
 
-    # Perform inference
-    labels = predict(model, boxes, texts)
+    try:
+        image, width, height = preprocess_image(image_path)
+        print(f"Image size: {width}x{height}")
 
-    # Print results
-    for box, label in zip(boxes, labels):
-        print(f"Box: {box}")
-        print(f"Predicted label: {label}")
-        print("---")
+        # Load corresponding annotation
+        annotation_path = "data/dataset/annotations/val.json"
+        if not os.path.exists(annotation_path):
+            print(f"Error: Annotation file not found at {annotation_path}")
+            return
+
+        with open(annotation_path, "r", encoding="utf-8") as f:
+            annotations = json.load(f)
+
+        # Find annotation for this image
+        image_id = os.path.basename(image_path)
+        annotation = next(
+            (ann for ann in annotations if ann["file_name"] == image_id), None
+        )
+
+        if annotation is None:
+            print(f"Error: No annotation found for image {image_id}")
+            return
+
+        # Extract boxes and texts from annotation
+        boxes = []
+        texts = []
+        for box in annotation["boxes"]:
+            # Convert normalized coordinates back to pixel coordinates
+            coords = np.array(box["poly"], dtype=np.float32)
+            coords[0::2] = coords[0::2] * width  # x coordinates
+            coords[1::2] = coords[1::2] * height  # y coordinates
+            boxes.append(coords.tolist())
+
+            # Encode text
+            text = box["text"]
+            if text is None:
+                text = ""
+            text = text.upper()
+            encoded = []
+            for char in text[:50]:  # max_text_length = 50
+                if char in cf.alphabet:
+                    encoded.append(cf.alphabet.index(char))
+                else:
+                    encoded.append(cf.alphabet.index(" "))
+            while len(encoded) < 50:
+                encoded.append(0)
+            texts.append(encoded)
+
+        # Perform inference
+        labels = predict(model, boxes, texts)
+
+        # Print results
+        print("\nPrediction results:")
+        print("------------------")
+        for i, (box, label) in enumerate(zip(boxes, labels)):
+            print(f"Box {i+1}:")
+            print(f"  Coordinates: {box}")
+            print(f"  Text: {annotation['boxes'][i]['text']}")
+            print(f"  True label: {annotation['boxes'][i]['label']}")
+            print(f"  Predicted label: {label}")
+            print("------------------")
+
+    except Exception as e:
+        print(f"Error processing image: {str(e)}")
 
 
 if __name__ == "__main__":
