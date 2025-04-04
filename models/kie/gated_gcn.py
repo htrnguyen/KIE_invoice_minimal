@@ -126,8 +126,9 @@ class GatedGCNNet(nn.Module):
 
     def __init__(self, net_params):
         super().__init__()
-        self.device = net_params.get("device", "cpu")
-        self.use_cuda = self.device == "cuda"
+        # Convert string device to torch.device object
+        self.device = torch.device(net_params.get("device", "cpu"))
+        self.use_cuda = self.device.type == "cuda"
 
         in_dim_text = net_params["in_dim_text"]
         in_dim_node = net_params["in_dim_node"]
@@ -173,6 +174,9 @@ class GatedGCNNet(nn.Module):
         self.to(self.device)
 
     def to(self, device):
+        # Convert string device to torch.device object if needed
+        if isinstance(device, str):
+            device = torch.device(device)
         super().to(device)
         self.device = device
         self.use_cuda = device.type == "cuda"
