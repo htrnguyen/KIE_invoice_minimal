@@ -276,20 +276,38 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
 @timer
 def postprocess_scores(batch_scores, score_ths=0.98, get_max=False):
     values, preds = [], []
-    batch_scores = batch_scores.cpu().softmax(1)
-    for score in batch_scores:
-        _score = score.detach().cpu().numpy()
-        values.append(_score.max())
-        pred_index = np.argmax(_score)
-        if get_max:
-            preds.append(pred_index)
-        else:
-            if pred_index != 0 and _score.max() >= score_ths:
+
+    # Check if batch_scores is a PyTorch tensor or NumPy array
+    if isinstance(batch_scores, torch.Tensor):
+        batch_scores = batch_scores.cpu().softmax(1)
+        for score in batch_scores:
+            _score = score.detach().numpy()
+            values.append(_score.max())
+            pred_index = np.argmax(_score)
+            if get_max:
                 preds.append(pred_index)
             else:
-                preds.append(0)
+                if pred_index != 0 and _score.max() >= score_ths:
+                    preds.append(pred_index)
+                else:
+                    preds.append(0)
+    else:
+        # If it's already a NumPy array, apply softmax manually
+        # Compute softmax along axis 1
+        exp_scores = np.exp(batch_scores - np.max(batch_scores, axis=1, keepdims=True))
+        softmax_scores = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
 
-    preds = np.array(preds)
+        for score in softmax_scores:
+            values.append(score.max())
+            pred_index = np.argmax(score)
+            if get_max:
+                preds.append(pred_index)
+            else:
+                if pred_index != 0 and score.max() >= score_ths:
+                    preds.append(pred_index)
+                else:
+                    preds.append(0)
+
     return values, preds
 
 
