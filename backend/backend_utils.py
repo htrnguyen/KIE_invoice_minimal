@@ -269,39 +269,18 @@ def get_largest_poly_with_coord(mask_img, reshape=False):
 def get_max_hw(point):
     rect = order_points(np.array(point.squeeze()))
     (tl, tr, br, bl) = rect
-
-    # Tính toán chiều rộng và chiều cao
     widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
     widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
     maxWidth = max(int(widthA), int(widthB))
-
     heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
     heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
     maxHeight = max(int(heightA), int(heightB))
-
-    # Kiểm tra hướng của ảnh
-    # Nếu chiều cao lớn hơn chiều rộng, giữ nguyên
-    # Nếu chiều rộng lớn hơn chiều cao, đổi chiều
-    if maxWidth > maxHeight:
-        return maxHeight, maxWidth
     return maxWidth, maxHeight
 
 
 def get_transform_matrix(point, maxWidth, maxHeight):
     pts1 = order_points(point.squeeze().copy().astype(np.float32))
-
-    # Kiểm tra hướng của ảnh
-    if maxWidth > maxHeight:
-        # Nếu ảnh ngang, xoay 90 độ để có ảnh dọc
-        pts2 = np.float32(
-            [[maxWidth, 0], [maxWidth, maxHeight], [0, maxHeight], [0, 0]]
-        )
-    else:
-        # Nếu ảnh dọc, giữ nguyên hướng
-        pts2 = np.float32(
-            [[0, 0], [maxWidth, 0], [maxWidth, maxHeight], [0, maxHeight]]
-        )
-
+    pts2 = np.float32([[0, 0], [maxWidth, 0], [maxWidth, maxHeight], [0, maxHeight]])
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
     return matrix
 
@@ -426,3 +405,12 @@ def vis_fields(
 
     if save:
         plt.imsave(save_img_fp, vis_img)
+
+
+def rotate_image_if_needed(img):
+    """Xoay ảnh về đúng chiều dọc nếu cần"""
+    h, w = img.shape[:2]
+    if w > h:  # Nếu ảnh đang nằm ngang
+        # Xoay 90 độ ngược chiều kim đồng hồ
+        return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return img

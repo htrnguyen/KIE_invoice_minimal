@@ -265,6 +265,8 @@ def visualize_results(
     """Visualize the predicted boxes and labels on the original image"""
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Hiển thị ảnh gốc
     ax.imshow(orig_img)
 
     # Define colors for different labels
@@ -280,12 +282,6 @@ def visualize_results(
         "OTHER": "gray",
     }
 
-    # Get the warped points for coordinate conversion
-    warped_point = get_largest_poly_with_coord(mask_img)
-    convert_coords = convert_warped_to_original_coords(
-        warped_point, orig_img.shape, warped_img.shape
-    )
-
     # Draw boxes and labels
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
@@ -293,21 +289,13 @@ def visualize_results(
         x_coords = [poly[j] for j in range(0, len(poly), 2)]
         y_coords = [poly[j] for j in range(1, len(poly), 2)]
 
-        # Convert coordinates from warped to original image
-        orig_x_coords = []
-        orig_y_coords = []
-        for x, y in zip(x_coords, y_coords):
-            orig_x, orig_y = convert_coords(x, y)
-            orig_x_coords.append(orig_x)
-            orig_y_coords.append(orig_y)
-
         # Get label
         label = cf.node_labels[pred]
         color = colors.get(label, "white")
 
         # Create polygon
         polygon = patches.Polygon(
-            np.column_stack((orig_x_coords, orig_y_coords)),
+            np.column_stack((x_coords, y_coords)),
             linewidth=2,
             edgecolor=color,
             facecolor="none",
@@ -320,8 +308,8 @@ def visualize_results(
         label_text = f"{label}: {text} ({value:.2f})"
 
         ax.text(
-            min(orig_x_coords),
-            min(orig_y_coords) - 10,
+            min(x_coords),
+            min(y_coords) - 10,
             label_text,
             color=color,
             fontsize=12,
@@ -333,8 +321,20 @@ def visualize_results(
 
     # Save figure to file if output_path is provided
     if output_path:
+        # Lưu hình với kích thước gốc
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
-        print(f"Visualization saved to: {output_path}")
+
+        # Đọc lại ảnh đã lưu và xoay nếu cần
+        saved_img = cv2.imread(output_path)
+        if saved_img is not None:
+            h, w = saved_img.shape[:2]
+            if w > h:  # Nếu ảnh đang nằm ngang
+                # Xoay 90 độ ngược chiều kim đồng hồ
+                rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                cv2.imwrite(output_path, rotated_img)
+                print(f"Đã xoay và lưu ảnh tại: {output_path}")
+            else:
+                print(f"Ảnh đã được lưu tại: {output_path}")
     else:
         # Try to display the figure
         try:
@@ -344,7 +344,15 @@ def visualize_results(
             print("Saving to default location instead...")
             default_path = "visualization_result.png"
             plt.savefig(default_path, dpi=300, bbox_inches="tight")
-            print(f"Visualization saved to: {default_path}")
+
+            # Xoay ảnh nếu cần
+            saved_img = cv2.imread(default_path)
+            if saved_img is not None:
+                h, w = saved_img.shape[:2]
+                if w > h:
+                    rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    cv2.imwrite(default_path, rotated_img)
+                print(f"Visualization saved to: {default_path}")
 
     plt.close()
 
