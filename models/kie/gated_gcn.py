@@ -72,19 +72,25 @@ class GatedGCNLayer(nn.Module):
         return {"h": h}
 
     def forward(self, g, h, e):
-        # Use the device of the input tensors
-        device = h.device
+        # Graph luôn ở trên CPU, nhưng features có thể ở trên GPU
+        # Lưu device của input tensors
+        h_device = h.device
+        e_device = e.device
 
-        # Move graph to the same device as tensors
-        g = g.to(device)
+        # Chuyển features về CPU để xử lý với DGL
+        h_cpu = h.to("cpu")
+        e_cpu = e.to("cpu")
 
-        g.ndata["h"] = h
-        g.ndata["Ah"] = self.A(h)
-        g.ndata["Bh"] = self.B(h)
-        g.ndata["Dh"] = self.D(h)
-        g.ndata["Eh"] = self.E(h)
-        g.edata["e"] = e
-        g.edata["Ce"] = self.C(e)
+        # Đảm bảo graph ở trên CPU
+        g = g.to("cpu")
+
+        g.ndata["h"] = h_cpu
+        g.ndata["Ah"] = self.A(h_cpu)
+        g.ndata["Bh"] = self.B(h_cpu)
+        g.ndata["Dh"] = self.D(h_cpu)
+        g.ndata["Eh"] = self.E(h_cpu)
+        g.edata["e"] = e_cpu
+        g.edata["Ce"] = self.C(e_cpu)
 
         g.update_all(self.message_func, self.reduce_func)
 
@@ -96,6 +102,10 @@ class GatedGCNLayer(nn.Module):
 
         h = F.relu(h)
         e = F.relu(e)
+
+        # Chuyển kết quả về device ban đầu
+        h = h.to(h_device)
+        e = e.to(e_device)
 
         return h, e
 
@@ -129,6 +139,9 @@ class GatedGCNNet(nn.Module):
         # Convert string device to torch.device object
         self.device = torch.device(net_params.get("device", "cpu"))
         self.use_cuda = self.device.type == "cuda"
+
+        # DGL luôn chạy trên CPU
+        self.dgl_device = torch.device("cpu")
 
         in_dim_text = net_params["in_dim_text"]
         in_dim_node = net_params["in_dim_node"]
@@ -203,7 +216,7 @@ class GatedGCNNet(nn.Module):
         for i in range(batch_size):
             n_nodes = boxes[i].size(0)
 
-            # Create graph on the same device as the input tensors
+            # Create graph on CPU (DGL không hỗ trợ CUDA)
             g = dgl.DGLGraph()
             g.add_nodes(n_nodes)
 
@@ -395,8 +408,9 @@ class GatedGCNNet(nn.Module):
             node_features.append(h_feats)
             edge_features.append(e_feats)
 
+        # DGL luôn chạy trên CPU
         batch_graph = dgl.batch(batch_graphs)
-        batch_graph = batch_graph.to(self.device)
+        # Không cần chuyển batch_graph đến device vì DGL không hỗ trợ CUDA
 
         h = torch.cat(node_features, dim=0).to(self.device)
         e = torch.cat(edge_features, dim=0).to(self.device)
