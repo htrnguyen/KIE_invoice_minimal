@@ -1,5 +1,6 @@
 import copy
 import imageio
+import os
 
 import cv2
 import numpy as np
@@ -11,31 +12,56 @@ from models.kie.gated_gcn import GatedGCNNet
 from backend.backend_utils import timer
 
 
-def load_gate_gcn_net(device, checkpoint_path):
-    net_params = {}
-    net_params["in_dim_text"] = len(cf.alphabet)
-    net_params["in_dim_node"] = 10
-    net_params["in_dim_edge"] = 2
-    net_params["hidden_dim"] = 512
-    net_params["out_dim"] = 384
-    net_params["n_classes"] = len(cf.node_labels)
-    net_params["in_feat_dropout"] = 0.1
-    net_params["dropout"] = 0.0
-    net_params["L"] = 4
-    net_params["readout"] = True
-    net_params["graph_norm"] = True
-    net_params["batch_norm"] = True
-    net_params["residual"] = True
-    net_params["device"] = "cuda"
-    net_params["OHEM"] = 3
+def load_gate_gcn_net(device, weight_path):
+    """Load GatedGCNNet model from weights"""
+    # Create model with default parameters
+    net_params = {
+        "in_dim_text": 768,  # LayoutXLM hidden size
+        "in_dim_node": 8,  # 8 coordinates for each box
+        "in_dim_edge": 2,  # 2D relative position
+        "hidden_dim": 256,
+        "out_dim": 128,
+        "n_classes": len(cf.node_labels),
+        "dropout": 0.1,
+        "L": 5,
+        "readout": True,
+        "batch_norm": True,
+        "residual": True,
+        "device": device,
+        "in_feat_dropout": 0.1,
+    }
 
     model = GatedGCNNet(net_params)
-
-    checkpoint = torch.load(checkpoint_path, map_location=torch.device(cf.device))
-    model.load_state_dict(checkpoint)
-
     model = model.to(device)
-    model.eval()
+
+    # Load weights
+    if os.path.exists(weight_path):
+        checkpoint = torch.load(weight_path, map_location=device)
+
+        # Filter out incompatible keys
+        model_state_dict = model.state_dict()
+        filtered_state_dict = {}
+
+        for k, v in checkpoint.items():
+            # Skip LayoutLM related keys
+            if k.startswith("layoutlmv2.") or k.startswith("layoutxlm."):
+                continue
+
+            # Remove 'module.' prefix if present
+            if k.startswith("module."):
+                k = k[7:]
+
+            if k in model_state_dict and v.shape == model_state_dict[k].shape:
+                filtered_state_dict[k] = v
+
+        # Load filtered weights
+        model.load_state_dict(filtered_state_dict, strict=False)
+        print(
+            f"Loaded {len(filtered_state_dict)}/{len(model_state_dict)} layers from pretrained weights"
+        )
+    else:
+        print(f"Warning: Weight file not found at {weight_path}")
+
     return model
 
 
