@@ -82,8 +82,10 @@ def predict(model, boxes, texts, device="cpu"):
     return labels
 
 
-def visualize_results(image_path, boxes, texts, labels, true_labels=None):
-    """Visualize the predicted boxes and labels on the image"""
+def visualize_results(
+    image_path, boxes, texts, labels, true_labels=None, output_path=None
+):
+    """Visualize the predicted boxes and labels on the image and save to file"""
     # Load image
     img = Image.open(image_path)
     img = np.array(img)
@@ -144,7 +146,23 @@ def visualize_results(image_path, boxes, texts, labels, true_labels=None):
 
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+
+    # Save figure to file if output_path is provided
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        print(f"Visualization saved to: {output_path}")
+    else:
+        # Try to display the figure
+        try:
+            plt.show()
+        except Exception as e:
+            print(f"Could not display figure: {e}")
+            print("Saving to default location instead...")
+            default_path = "visualization_result.png"
+            plt.savefig(default_path, dpi=300, bbox_inches="tight")
+            print(f"Visualization saved to: {default_path}")
+
+    plt.close()
 
 
 def main():
@@ -167,7 +185,13 @@ def main():
     parser.add_argument(
         "--image", type=str, help="Specific image to process (e.g., 0001.jpg)"
     )
+    parser.add_argument(
+        "--output", type=str, help="Output path for visualization (e.g., result.png)"
+    )
     args = parser.parse_args()
+
+    # Set default output path if not provided
+    output_path = args.output if args.output else "visualization_result.png"
 
     if args.image:
         # Process the specified image
@@ -258,8 +282,14 @@ def main():
                 print(f"  Predicted label: {label}")
                 print("---------------------------------------------")
 
-            # Visualize results
-            visualize_results(image_path, boxes, [text1, text2, text3], labels)
+            # Visualize results and save to file
+            visualize_results(
+                image_path,
+                boxes,
+                [text1, text2, text3],
+                labels,
+                output_path=output_path,
+            )
 
         except Exception as e:
             print(f"Error processing image: {str(e)}")
@@ -350,13 +380,14 @@ def main():
                 print(f"  Predicted label: {label}")
                 print("------------------")
 
-            # Visualize results
+            # Visualize results and save to file
             visualize_results(
                 image_path,
                 boxes,
                 [box["text"] for box in annotation["boxes"]],
                 labels,
                 true_labels,
+                output_path=output_path,
             )
 
         except Exception as e:
