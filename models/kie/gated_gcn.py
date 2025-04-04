@@ -126,8 +126,8 @@ class GatedGCNNet(nn.Module):
 
     def __init__(self, net_params):
         super().__init__()
-        self.device = "cpu"  # Force CPU since DGL doesn't support CUDA
-        self.use_cuda = False
+        self.device = net_params.get("device", "cpu")
+        self.use_cuda = self.device == "cuda"
 
         in_dim_text = net_params["in_dim_text"]
         in_dim_node = net_params["in_dim_node"]
@@ -174,18 +174,18 @@ class GatedGCNNet(nn.Module):
 
     def to(self, device):
         super().to(device)
-        self.device = "cpu"  # Force CPU since DGL doesn't support CUDA
-        self.use_cuda = False
+        self.device = device
+        self.use_cuda = device.type == "cuda"
 
         # Move LayoutXLM to device
-        self.layoutxlm = self.layoutxlm.to(self.device)
+        self.layoutxlm = self.layoutxlm.to(device)
 
         # Move all other layers to device
-        self.node_encoder = self.node_encoder.to(self.device)
-        self.edge_encoder = self.edge_encoder.to(self.device)
+        self.node_encoder = self.node_encoder.to(device)
+        self.edge_encoder = self.edge_encoder.to(device)
         for layer in self.layers:
-            layer.to(self.device)
-        self.MLP_layer = self.MLP_layer.to(self.device)
+            layer.to(device)
+        self.MLP_layer = self.MLP_layer.to(device)
 
         return self
 
@@ -392,7 +392,7 @@ class GatedGCNNet(nn.Module):
             edge_features.append(e_feats)
 
         batch_graph = dgl.batch(batch_graphs)
-        batch_graph = batch_graph.to("cpu")
+        batch_graph = batch_graph.to(self.device)
 
         h = torch.cat(node_features, dim=0).to(self.device)
         e = torch.cat(edge_features, dim=0).to(self.device)
