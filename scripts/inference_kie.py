@@ -100,16 +100,31 @@ def run_saliency(net, img):
         pred = d1[:, 0, :, :]
         pred = pred.squeeze().cpu().numpy()
 
-    # Threshold
-    mask = pred > cf.saliency_ths
+    # Try different thresholds if needed
+    thresholds = [cf.saliency_ths, 0.3, 0.2, 0.1]  # Add lower thresholds as fallbacks
+    mask = None
 
-    # Resize mask back to original image dimensions
-    mask = cv2.resize(
-        mask.astype(np.float32), (orig_w, orig_h), interpolation=cv2.INTER_LINEAR
-    )
-    mask = mask > 0.5  # Re-threshold after resizing
+    for thresh in thresholds:
+        # Threshold
+        mask = pred > thresh
+        mask = mask.astype(np.uint8)
 
-    return mask.astype(np.uint8)
+        # Resize mask back to original image dimensions
+        mask = cv2.resize(
+            mask.astype(np.float32), (orig_w, orig_h), interpolation=cv2.INTER_LINEAR
+        )
+        mask = (mask > 0.5).astype(np.uint8)  # Re-threshold after resizing
+
+        # Check if mask is valid (contains some foreground)
+        if np.any(mask):
+            break
+
+    # If still no valid mask, create a full image mask
+    if mask is None or not np.any(mask):
+        print("Warning: No valid mask found, using full image mask")
+        mask = np.ones((orig_h, orig_w), dtype=np.uint8)
+
+    return mask
 
 
 def process_image(
