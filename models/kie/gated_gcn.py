@@ -274,7 +274,11 @@ class GatedGCNNet(nn.Module):
             for j in range(n_nodes):
                 text_tensor = texts[i][j]
                 if isinstance(text_tensor, torch.Tensor):
-                    text = " ".join([str(x.item()) for x in text_tensor])
+                    # Handle 0-d tensor
+                    if text_tensor.dim() == 0:
+                        text = str(text_tensor.item())
+                    else:
+                        text = " ".join([str(x.item()) for x in text_tensor])
                 else:
                     text = str(text_tensor)
                 text_list.append(text)
