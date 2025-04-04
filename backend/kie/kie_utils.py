@@ -192,6 +192,8 @@ def prepare_graph(cells):
 
 @timer
 def run_predict(gcn_net, merged_cells, device="cpu"):
+    # Force CPU for DGL operations
+    dgl_device = "cpu"
 
     (
         batch_graphs,
@@ -206,7 +208,8 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
         graph_edge_size,
     ) = prepare_graph(merged_cells)
 
-    batch_graphs = batch_graphs.to(device)
+    # Move graph to CPU first, then to the target device if needed
+    batch_graphs = batch_graphs.to(dgl_device)
     batch_x = batch_x.to(device)
     batch_e = batch_e.to(device)
 
@@ -215,7 +218,7 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
     batch_snorm_e = batch_snorm_e.to(device)
     batch_snorm_n = batch_snorm_n.to(device)
 
-    batch_graphs = batch_graphs.to(device)
+    # No need to move batch_graphs again, it's already on CPU
     batch_scores = gcn_net.forward(
         batch_graphs,
         batch_x,

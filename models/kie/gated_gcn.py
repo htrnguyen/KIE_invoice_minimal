@@ -72,6 +72,13 @@ class GatedGCNLayer(nn.Module):
         return {"h": h}
 
     def forward(self, g, h, e):
+        # Ensure graph is on CPU
+        g = g.to("cpu")
+
+        # Move features to CPU for DGL operations
+        h = h.to("cpu")
+        e = e.to("cpu")
+
         g.ndata["h"] = h
         g.ndata["Ah"] = self.A(h)
         g.ndata["Bh"] = self.B(h)
@@ -79,13 +86,22 @@ class GatedGCNLayer(nn.Module):
         g.ndata["Eh"] = self.E(h)
         g.edata["e"] = e
         g.edata["Ce"] = self.C(e)
+
         g.update_all(self.message_func, self.reduce_func)
+
         h = g.ndata["h"]
         e = g.edata["e"]
+
         h = self.bn_node_h(h)
         e = self.bn_node_e(e)
+
         h = F.relu(h)
         e = F.relu(e)
+
+        # Move features back to original device
+        h = h.to(self.A.weight.device)
+        e = e.to(self.C.weight.device)
+
         return h, e
 
     def __repr__(self):
@@ -188,7 +204,7 @@ class GatedGCNNet(nn.Module):
         for i in range(batch_size):
             n_nodes = boxes[i].size(0)
 
-            # Create graph
+            # Create graph on CPU
             g = dgl.DGLGraph()
             g.add_nodes(n_nodes)
 
@@ -410,9 +426,10 @@ class GatedGCNNet(nn.Module):
             node_features.append(h_feats)
             edge_features.append(e_feats)
 
-        # Batch graphs
+        # Batch graphs on CPU
         batch_graph = dgl.batch(batch_graphs)
-        batch_graph = batch_graph.to(self.device)
+        # Keep batch_graph on CPU
+        batch_graph = batch_graph.to("cpu")
 
         # Concatenate features and ensure they are on the same device
         h = torch.cat(node_features, dim=0).to(self.device)
