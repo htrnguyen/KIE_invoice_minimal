@@ -10,146 +10,139 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
 import cv2
-import pytesseract
-from PIL import Image, ImageOps
+import imageio
+import base64
+import io
+import time
+import uuid
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 from models.kie.gated_gcn import GatedGCNNet
+from models.saliency.u2net import U2NET
+from models.text_detect.craft import CRAFT
+from vietocr.tool.config import Cfg
+from vietocr.tool.predictor import Predictor
 import configs as cf
+from backend.backend_utils import (
+    run_ocr,
+    make_warp_img,
+    resize_and_pad,
+    get_group_text_line,
+    create_merge_cells,
+)
+from backend.kie.kie_utils import (
+    load_gate_gcn_net,
+    run_predict,
+    postprocess_scores,
+    postprocess_write_info,
+)
 
 
-def load_model(checkpoint_path):
-    """Load trained model from checkpoint"""
-    # Model parameters
-    net_params = {
-        "in_dim_text": 768,  # LayoutXLM hidden size
-        "in_dim_node": 8,  # 8 coordinates for each box
-        "in_dim_edge": 2,  # 2D relative position
-        "hidden_dim": 256,
-        "out_dim": 128,
-        "n_classes": len(cf.node_labels),
-        "dropout": 0.1,
-        "L": 5,
-        "readout": True,
-        "batch_norm": True,
-        "residual": True,
-        "device": "cpu",
-        "in_feat_dropout": 0.1,
-    }
+def load_models():
+    """Load all required models for the KIE pipeline"""
+    # Load saliency model (U2Net)
+    saliency_net = U2NET(3, 1)
+    saliency_net.load_state_dict(
+        torch.load(cf.saliency_weight_path, map_location=torch.device(cf.device))
+    )
+    saliency_net = saliency_net.to(cf.device)
+    saliency_net.eval()
 
-    # Create model
-    model = GatedGCNNet(net_params)
+    # Load text detection model (CRAFT)
+    text_detector = CRAFT()
+    text_detector.load_state_dict(
+        torch.load(cf.text_detection_weights_path, map_location=torch.device(cf.device))
+    )
+    text_detector = text_detector.to(cf.device)
+    text_detector.eval()
 
-    # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    model.load_state_dict(checkpoint["state_dict"])
-    model.eval()
+    # Load text recognition model (VietOCR)
+    config = Cfg.load_config_from_name("vgg_seq2seq")
+    config["cnn"]["pretrained"] = False
+    config["device"] = cf.device
+    config["predictor"]["beamsearch"] = False
+    text_recognizer = Predictor(config)
 
-    return model
+    # Load KIE model (GatedGCNNet)
+    gcn_net = load_gate_gcn_net(cf.device, cf.kie_weight_path)
 
-
-def preprocess_image(image_path):
-    """Load and preprocess image"""
-    # Load image with PIL to preserve orientation
-    image = Image.open(image_path)
-
-    # Get image dimensions
-    width, height = image.size
-
-    # Convert to numpy array for OpenCV processing
-    img_np = np.array(image)
-
-    return image, img_np, width, height
+    return saliency_net, text_detector, text_recognizer, gcn_net
 
 
-def extract_text_from_bbox(image, bbox):
-    """Extract text from a bounding box using OCR"""
-    # Convert bbox coordinates to integers
-    x_coords = [int(bbox[j]) for j in range(0, len(bbox), 2)]
-    y_coords = [int(bbox[j]) for j in range(1, len(bbox), 2)]
+def run_saliency(net, img):
+    """Run saliency detection to remove background"""
+    img = resize_and_pad(img, size=1024, pad=False)
 
-    # Get bounding box coordinates
-    x_min, x_max = min(x_coords), max(x_coords)
-    y_min, y_max = min(y_coords), max(y_coords)
+    # Convert to tensor
+    img_tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    img_tensor = img_tensor.to(cf.device)
 
-    # Ensure coordinates are within image bounds
-    x_min = max(0, x_min)
-    y_min = max(0, y_min)
-    x_max = min(image.shape[1], x_max)
-    y_max = min(image.shape[0], y_max)
-
-    # Extract region of interest
-    roi = image[y_min:y_max, x_min:x_max]
-
-    # Check if ROI is empty
-    if roi.size == 0:
-        return ""
-
-    # Convert to grayscale
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-
-    # Apply thresholding to preprocess the image
-    gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-
-    # Apply dilation to connect text components
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    gray = cv2.dilate(gray, kernel, iterations=1)
-
-    # Apply median blur to smooth image
-    gray = cv2.medianBlur(gray, 3)
-
-    # Apply OCR
-    try:
-        text = pytesseract.image_to_string(gray, config="--psm 6")
-        return text.strip()
-    except Exception as e:
-        print(f"OCR error: {e}")
-        return ""
-
-
-def predict(model, boxes, texts, device="cpu"):
-    """Perform inference on a single image"""
-    model = model.to(device)
-
+    # Forward pass
     with torch.no_grad():
-        # Convert inputs to tensors and ensure they are on the correct device
-        boxes = [torch.tensor(box, dtype=torch.float32).to(device) for box in boxes]
-        texts = [torch.tensor(text, dtype=torch.long).to(device) for text in texts]
+        d1 = net(img_tensor)[0]
+        pred = d1[:, 0, :, :]
+        pred = pred.squeeze().cpu().numpy()
 
-        # Forward pass
-        outputs = model(boxes, texts)
-
-        # Get predictions
-        predictions = torch.argmax(outputs, dim=1)
-
-        # Convert predictions to labels
-        labels = []
-        for pred in predictions:
-            pred_idx = pred.item()  # Convert 0-dim tensor to Python scalar
-            if 0 <= pred_idx < len(cf.node_labels):
-                labels.append(cf.node_labels[pred_idx])
-            else:
-                labels.append("UNKNOWN")
-
-    return labels
+    # Threshold
+    mask = pred > cf.saliency_ths
+    return mask.astype(np.uint8)
 
 
-def visualize_results(
-    image_path, boxes, texts, labels, true_labels=None, output_path=None
+def process_image(
+    image_path, saliency_net, text_detector, text_recognizer, gcn_net, output_path=None
 ):
-    """Visualize the predicted boxes and labels on the image and save to file"""
+    """Process image through the complete KIE pipeline"""
     # Load image
-    image = Image.open(image_path)
+    img = imageio.imread(image_path)
+    print(f"Processing image: {image_path}")
+    print(f"Image size: {img.shape}")
 
-    # Preserve image orientation
-    image = ImageOps.exif_transpose(image)
+    # 1. Background subtraction
+    print("Step 1: Background subtraction...")
+    mask_img = run_saliency(saliency_net, img)
+    img[~mask_img.astype(bool)] = 0.0
 
-    # Convert to numpy array
-    img = np.array(image)
+    # 2. Image alignment
+    print("Step 2: Image alignment...")
+    warped_img = make_warp_img(img, mask_img)
 
+    # 3 & 4. Text detection and recognition
+    print("Step 3 & 4: Text detection and recognition...")
+    cells, heatmap, textboxes = run_ocr(
+        text_detector, text_recognizer, warped_img, cf.craft_config
+    )
+    _, lines = get_group_text_line(heatmap, textboxes)
+    for line_id, cell in zip(lines, cells):
+        cell["group_id"] = line_id
+
+    # Merge adjacent text-boxes
+    group_ids = np.array([i["group_id"] for i in cells])
+    merged_cells = create_merge_cells(
+        text_recognizer, warped_img, cells, group_ids, merge_text=cf.merge_text
+    )
+
+    # 5. Key Information Extraction
+    print("Step 5: Key Information Extraction...")
+    batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
+
+    # Post-process scores
+    values, preds = postprocess_scores(
+        batch_scores, score_ths=cf.score_ths, get_max=cf.get_max
+    )
+    kie_info = postprocess_write_info(merged_cells, preds)
+
+    # Visualize results
+    print("Visualizing results...")
+    visualize_results(warped_img, merged_cells, preds, values, boxes, output_path)
+
+    return kie_info, warped_img, merged_cells, preds, values, boxes
+
+
+def visualize_results(img, cells, preds, values, boxes, output_path=None):
+    """Visualize the predicted boxes and labels on the image"""
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.imshow(img)
@@ -158,48 +151,45 @@ def visualize_results(
     colors = {
         "NAME": "red",
         "BRAND": "blue",
-        "PRICE": "green",
-        "WEIGHT": "purple",
+        "MFG_LABEL": "green",
+        "MFG": "green",
+        "EXP_LABEL": "purple",
+        "EXP": "purple",
         "WEIGHT_LABEL": "orange",
+        "WEIGHT": "orange",
         "OTHER": "gray",
     }
 
     # Draw boxes and labels
-    for i, (box, text, label) in enumerate(zip(boxes, texts, labels)):
-        # Convert box coordinates to polygon format
-        x_coords = [box[j] for j in range(0, len(box), 2)]
-        y_coords = [box[j] for j in range(1, len(box), 2)]
+    for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
+        # Get box coordinates
+        poly = cell["poly"]
+        x_coords = [poly[j] for j in range(0, len(poly), 2)]
+        y_coords = [poly[j] for j in range(1, len(poly), 2)]
+
+        # Get label
+        label = cf.node_labels[pred]
+        color = colors.get(label, "white")
 
         # Create polygon
         polygon = patches.Polygon(
             np.column_stack((x_coords, y_coords)),
             linewidth=2,
-            edgecolor=colors.get(label, "white"),
+            edgecolor=color,
             facecolor="none",
             alpha=0.7,
         )
         ax.add_patch(polygon)
 
         # Add label text
-        if isinstance(text, list):
-            # If text is encoded, convert back to string
-            text_str = ""
-            for char_idx in text:
-                if char_idx < len(cf.alphabet):
-                    text_str += cf.alphabet[char_idx]
-        else:
-            text_str = text
-
-        # Add label text
-        label_text = f"{label}"
-        if true_labels and i < len(true_labels):
-            label_text += f" (True: {true_labels[i]})"
+        text = cell.get("vietocr_text", "")
+        label_text = f"{label}: {text} ({value:.2f})"
 
         ax.text(
             min(x_coords),
             min(y_coords) - 10,
             label_text,
-            color=colors.get(label, "white"),
+            color=color,
             fontsize=12,
             bbox=dict(facecolor="black", alpha=0.7),
         )
@@ -226,155 +216,41 @@ def visualize_results(
 
 
 def main():
-    # Load model
-    checkpoint_path = "weights/kie/model_best.pth"
-    if not os.path.exists(checkpoint_path):
-        print(f"Error: Checkpoint file not found at {checkpoint_path}")
-        return
-
-    model = load_model(checkpoint_path)
-
-    # Load a sample image from the dataset
-    dataset_path = "data/images"
-    if not os.path.exists(dataset_path):
-        print(f"Error: Dataset directory not found at {dataset_path}")
-        return
-
-    # Check if a specific image is requested
-    parser = argparse.ArgumentParser(description="Run inference on an image")
-    parser.add_argument(
-        "--image", type=str, help="Specific image to process (e.g., 0001.jpg)"
-    )
-    parser.add_argument(
-        "--output", type=str, help="Output path for visualization (e.g., result.png)"
-    )
-    parser.add_argument(
-        "--ocr", action="store_true", help="Use OCR to extract text from bounding boxes"
-    )
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Run KIE inference on an image")
+    parser.add_argument("--image", type=str, help="Path to the image file")
+    parser.add_argument("--output", type=str, help="Output path for visualization")
     args = parser.parse_args()
 
-    # Set default output path if not provided
-    output_path = args.output if args.output else "visualization_result.png"
+    # Load models
+    print("Loading models...")
+    saliency_net, text_detector, text_recognizer, gcn_net = load_models()
 
+    # Process image
     if args.image:
         # Process the specified image
-        image_path = os.path.join(dataset_path, args.image)
-        if not os.path.exists(image_path):
-            print(f"Error: Image file not found at {image_path}")
-            return
+        image_path = args.image
+        output_path = args.output if args.output else "visualization_result.png"
 
-        print(f"Processing specified image: {image_path}")
+        kie_info, warped_img, cells, preds, values, boxes = process_image(
+            image_path,
+            saliency_net,
+            text_detector,
+            text_recognizer,
+            gcn_net,
+            output_path,
+        )
 
-        try:
-            # Load and preprocess image
-            image, img_np, width, height = preprocess_image(image_path)
-            print(f"Image size: {width}x{height}")
-
-            # For images without annotations, we need to extract boxes and texts
-            # This is a simplified example - in a real application, you would use OCR
-            # to extract text and bounding boxes from the image
-
-            # For demonstration, we'll create some example boxes and texts
-            # In a real application, you would replace this with actual OCR results
-            boxes = []
-            texts = []
-
-            # Example: Create a few boxes covering different regions of the image
-            # These are just examples - in a real application, you would use OCR
-            # to detect text regions
-            box1 = [0.1, 0.1, 0.3, 0.1, 0.3, 0.2, 0.1, 0.2]  # Normalized coordinates
-            box2 = [0.4, 0.3, 0.6, 0.3, 0.6, 0.4, 0.4, 0.4]
-            box3 = [0.2, 0.5, 0.8, 0.5, 0.8, 0.6, 0.2, 0.6]
-
-            # Convert normalized coordinates to pixel coordinates
-            box1_pixels = [
-                coord * width if i % 2 == 0 else coord * height
-                for i, coord in enumerate(box1)
-            ]
-            box2_pixels = [
-                coord * width if i % 2 == 0 else coord * height
-                for i, coord in enumerate(box2)
-            ]
-            box3_pixels = [
-                coord * width if i % 2 == 0 else coord * height
-                for i, coord in enumerate(box3)
-            ]
-
-            boxes.append(box1_pixels)
-            boxes.append(box2_pixels)
-            boxes.append(box3_pixels)
-
-            # Use OCR to extract text from bounding boxes if requested
-            if args.ocr:
-                print("Using OCR to extract text from bounding boxes...")
-                text1 = extract_text_from_bbox(img_np, box1_pixels)
-                text2 = extract_text_from_bbox(img_np, box2_pixels)
-                text3 = extract_text_from_bbox(img_np, box3_pixels)
-
-                print(f"Extracted text from box 1: '{text1}'")
-                print(f"Extracted text from box 2: '{text2}'")
-                print(f"Extracted text from box 3: '{text3}'")
-            else:
-                # Example texts (in a real application, these would come from OCR)
-                # For demonstration, we'll use placeholder texts
-                text1 = "EXAMPLE TEXT 1"
-                text2 = "EXAMPLE TEXT 2"
-                text3 = "EXAMPLE TEXT 3"
-
-            # Encode texts
-            def encode_text(text, max_length=50):
-                if text is None:
-                    return [0] * max_length
-
-                text = text.upper()
-                encoded = []
-                for char in text[:max_length]:
-                    if char in cf.alphabet:
-                        encoded.append(cf.alphabet.index(char))
-                    else:
-                        encoded.append(cf.alphabet.index(" "))
-                # Pad sequence
-                while len(encoded) < max_length:
-                    encoded.append(0)  # Padding with space
-                return encoded
-
-            texts.append(encode_text(text1))
-            texts.append(encode_text(text2))
-            texts.append(encode_text(text3))
-
-            # Perform inference
-            labels = predict(model, boxes, texts)
-
-            # Print results
-            print("\nPrediction results for image without annotations:")
-            print("---------------------------------------------")
-            for i, (box, text, label) in enumerate(
-                zip(boxes, [text1, text2, text3], labels)
-            ):
-                print(f"Box {i+1}:")
-                print(f"  Coordinates: {box}")
-                print(f"  Text: {text}")
-                print(f"  Predicted label: {label}")
-                print("---------------------------------------------")
-
-            # Visualize results and save to file
-            visualize_results(
-                image_path,
-                boxes,
-                [text1, text2, text3],
-                labels,
-                output_path=output_path,
-            )
-
-        except Exception as e:
-            print(f"Error processing image: {str(e)}")
-            import traceback
-
-            traceback.print_exc()
-
+        # Print extracted information
+        print("\nExtracted Information:")
+        print("----------------------")
+        for key, value in kie_info.items():
+            print(f"{key}: {value}")
     else:
-        # Load annotations first to find a valid image
+        # Find a valid image from the dataset
+        dataset_path = "data/images"
         annotation_path = "data/dataset/annotations/val.json"
+
         if not os.path.exists(annotation_path):
             print(f"Error: Annotation file not found at {annotation_path}")
             return
@@ -397,92 +273,22 @@ def main():
             return
 
         image_path = os.path.join(dataset_path, valid_image)
-        print(f"Processing image: {image_path}")
+        output_path = args.output if args.output else "visualization_result.png"
 
-        try:
-            # Load and preprocess image
-            image, img_np, width, height = preprocess_image(image_path)
-            print(f"Image size: {width}x{height}")
+        kie_info, warped_img, cells, preds, values, boxes = process_image(
+            image_path,
+            saliency_net,
+            text_detector,
+            text_recognizer,
+            gcn_net,
+            output_path,
+        )
 
-            # Find annotation for this image
-            annotation = next(
-                (ann for ann in annotations if ann["file_name"] == valid_image), None
-            )
-
-            if annotation is None:
-                print(f"Error: No annotation found for image {valid_image}")
-                return
-
-            # Extract boxes and texts from annotation
-            boxes = []
-            texts = []
-            true_labels = []
-            extracted_texts = []
-
-            for box in annotation["boxes"]:
-                # Convert normalized coordinates back to pixel coordinates
-                coords = np.array(box["poly"], dtype=np.float32)
-                coords[0::2] = coords[0::2] * width  # x coordinates
-                coords[1::2] = coords[1::2] * height  # y coordinates
-                boxes.append(coords.tolist())
-
-                # Use OCR to extract text if requested
-                if args.ocr:
-                    extracted_text = extract_text_from_bbox(img_np, coords.tolist())
-                    extracted_texts.append(extracted_text)
-                    print(
-                        f"Extracted text: '{extracted_text}' (Original: '{box['text']}')"
-                    )
-
-                # Encode text
-                text = box["text"]
-                if text is None:
-                    text = ""
-                text = text.upper()
-                encoded = []
-                for char in text[:50]:  # max_text_length = 50
-                    if char in cf.alphabet:
-                        encoded.append(cf.alphabet.index(char))
-                    else:
-                        encoded.append(cf.alphabet.index(" "))
-                while len(encoded) < 50:
-                    encoded.append(0)
-                texts.append(encoded)
-
-                # Store true label
-                true_labels.append(box["label"])
-
-            # Perform inference
-            labels = predict(model, boxes, texts)
-
-            # Print results
-            print("\nPrediction results:")
-            print("------------------")
-            for i, (box, label) in enumerate(zip(boxes, labels)):
-                print(f"Box {i+1}:")
-                print(f"  Coordinates: {box}")
-                print(f"  Text: {annotation['boxes'][i]['text']}")
-                if args.ocr and i < len(extracted_texts):
-                    print(f"  OCR Text: {extracted_texts[i]}")
-                print(f"  True label: {annotation['boxes'][i]['label']}")
-                print(f"  Predicted label: {label}")
-                print("------------------")
-
-            # Visualize results and save to file
-            visualize_results(
-                image_path,
-                boxes,
-                [box["text"] for box in annotation["boxes"]],
-                labels,
-                true_labels,
-                output_path=output_path,
-            )
-
-        except Exception as e:
-            print(f"Error processing image: {str(e)}")
-            import traceback
-
-            traceback.print_exc()
+        # Print extracted information
+        print("\nExtracted Information:")
+        print("----------------------")
+        for key, value in kie_info.items():
+            print(f"{key}: {value}")
 
 
 if __name__ == "__main__":
