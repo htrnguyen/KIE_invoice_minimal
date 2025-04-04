@@ -265,11 +265,15 @@ class GatedGCNNet(nn.Module):
         all_node_features = []
         all_edge_features = []
         all_graphs = []
+        original_node_counts = []  # Lưu số lượng node ban đầu
 
         for i in range(batch_size):
             num_nodes = boxes[i].size(0)
             if num_nodes == 0:
                 continue
+
+            # Lưu số lượng node ban đầu
+            original_node_counts.append(num_nodes)
 
             # Tạo node features từ boxes
             node_features = boxes[i]  # [num_nodes, 8]
@@ -280,6 +284,7 @@ class GatedGCNNet(nn.Module):
                 num_nodes = 1
 
             # Nếu chỉ có 1 node, tạo thêm 1 node giả để có thể tạo edge
+            fake_node_added = False
             if num_nodes == 1:
                 # Tạo node giả với tọa độ khác biệt
                 fake_node = node_features[0].clone()
@@ -288,6 +293,7 @@ class GatedGCNNet(nn.Module):
                     [node_features, fake_node.unsqueeze(0)], dim=0
                 )
                 num_nodes = 2
+                fake_node_added = True
 
             # Tạo edge features từ tương đối vị trí
             edge_features = []
@@ -379,10 +385,10 @@ class GatedGCNNet(nn.Module):
         batch_graph = dgl.batch(all_graphs)
 
         # Kiểm tra kích thước của node_features và edge_features
-        # print(f"node_features shape: {node_features.shape}")
-        # print(f"edge_features shape: {edge_features.shape}")
-        # print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
-        # print(f"edge_encoder weight shape: {self.edge_encoder.weight.shape}")
+        print(f"node_features shape: {node_features.shape}")
+        print(f"edge_features shape: {edge_features.shape}")
+        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
+        print(f"edge_encoder weight shape: {self.edge_encoder.weight.shape}")
 
         # Điều chỉnh kích thước của node_features để phù hợp với node_encoder
         # Nếu kích thước không khớp, tạo một layer mới với kích thước phù hợp
@@ -447,6 +453,10 @@ class GatedGCNNet(nn.Module):
 
         # MLP layers
         h = self.MLP_layer(h)
+
+        # Nếu chúng ta đã thêm node giả, chỉ trả về kết quả cho các node thật
+        if fake_node_added:
+            h = h[:1]  # Chỉ lấy kết quả cho node đầu tiên
 
         return h
 
