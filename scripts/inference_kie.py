@@ -348,8 +348,9 @@ def visualize_results(
         # Kiểm tra orientation của ảnh gốc
         orig_h, orig_w = orig_img.shape[:2]
         if orig_w > orig_h:  # Nếu ảnh gốc là landscape
-            # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ
+            # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ và thêm 180 độ
             saved_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            saved_img = cv2.rotate(saved_img, cv2.ROTATE_180)
 
         # Lưu ảnh đã xoay
         cv2.imwrite(output_path, saved_img)
@@ -378,8 +379,9 @@ def visualize_results(
             # Kiểm tra orientation của ảnh gốc
             orig_h, orig_w = orig_img.shape[:2]
             if orig_w > orig_h:  # Nếu ảnh gốc là landscape
-                # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ
+                # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ và thêm 180 độ
                 saved_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                saved_img = cv2.rotate(saved_img, cv2.ROTATE_180)
 
             # Lưu ảnh đã xoay
             cv2.imwrite(default_path, saved_img)
