@@ -32,6 +32,9 @@ from backend.backend_utils import (
     resize_and_pad,
     get_group_text_line,
     create_merge_cells,
+    get_largest_poly_with_coord,
+    get_max_hw,
+    get_transform_matrix,
 )
 from backend.kie.kie_utils import (
     load_gate_gcn_net,
@@ -134,8 +137,8 @@ def display_results_json(cells, preds, values):
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
         poly = cell["poly"]
-        x_coords = [poly[j] for j in range(0, len(poly), 2)]
-        y_coords = [poly[j] for j in range(1, len(poly), 2)]
+        x_coords = [float(poly[j]) for j in range(0, len(poly), 2)]
+        y_coords = [float(poly[j]) for j in range(1, len(poly), 2)]
 
         # Get label
         label = cf.node_labels[pred]
@@ -149,11 +152,11 @@ def display_results_json(cells, preds, values):
             "text": text,
             "confidence": float(value),
             "bbox": {
-                "x_min": min(x_coords),
-                "y_min": min(y_coords),
-                "x_max": max(x_coords),
-                "y_max": max(y_coords),
-                "points": list(zip(x_coords, y_coords)),
+                "x_min": float(min(x_coords)),
+                "y_min": float(min(y_coords)),
+                "x_max": float(max(x_coords)),
+                "y_max": float(max(y_coords)),
+                "points": [[float(x), float(y)] for x, y in zip(x_coords, y_coords)],
             },
         }
 
