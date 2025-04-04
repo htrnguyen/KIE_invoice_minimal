@@ -274,6 +274,10 @@ class GatedGCNNet(nn.Module):
             # Tạo node features từ boxes
             node_features = boxes[i]  # [num_nodes, 8]
 
+            # Đảm bảo node_features là tensor 2 chiều
+            if node_features.dim() == 1:
+                node_features = node_features.unsqueeze(0)  # Thêm dimension cho batch
+
             # Tạo edge features từ tương đối vị trí
             edge_features = []
             edge_index = []
@@ -283,7 +287,22 @@ class GatedGCNNet(nn.Module):
                 for k in range(num_nodes):
                     if j != k:
                         # Tính tương đối vị trí
-                        rel_pos = node_features[j, :2] - node_features[k, :2]  # [2]
+                        # Đảm bảo node_features[j] và node_features[k] là tensor 1 chiều
+                        node_j = node_features[j]
+                        node_k = node_features[k]
+
+                        if node_j.dim() == 0:
+                            node_j = node_j.unsqueeze(0)
+                        if node_k.dim() == 0:
+                            node_k = node_k.unsqueeze(0)
+
+                        # Lấy 2 phần tử đầu tiên cho tọa độ x, y
+                        if node_j.size(0) >= 2 and node_k.size(0) >= 2:
+                            rel_pos = node_j[:2] - node_k[:2]  # [2]
+                        else:
+                            # Nếu không đủ phần tử, tạo tọa độ giả
+                            rel_pos = torch.zeros(2, device=device)
+
                         edge_features.append(rel_pos)
                         edge_index.append([j, k])
 
