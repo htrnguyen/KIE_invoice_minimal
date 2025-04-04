@@ -80,7 +80,7 @@ def main():
     model = load_model(checkpoint_path)
 
     # Load a sample image from the dataset
-    dataset_path = "data/dataset/images"
+    dataset_path = "data/images"
     if not os.path.exists(dataset_path):
         print(f"Error: Dataset directory not found at {dataset_path}")
         return
