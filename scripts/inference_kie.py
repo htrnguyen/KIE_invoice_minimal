@@ -127,6 +127,46 @@ def run_saliency(net, img):
     return mask
 
 
+def display_results_json(cells, preds, values):
+    """Display the results in JSON format"""
+    results = []
+
+    for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
+        # Get box coordinates
+        poly = cell["poly"]
+        x_coords = [poly[j] for j in range(0, len(poly), 2)]
+        y_coords = [poly[j] for j in range(1, len(poly), 2)]
+
+        # Get label
+        label = cf.node_labels[pred]
+
+        # Get text
+        text = cell.get("vietocr_text", "")
+
+        # Create result object
+        result = {
+            "label": label,
+            "text": text,
+            "confidence": float(value),
+            "bbox": {
+                "x_min": min(x_coords),
+                "y_min": min(y_coords),
+                "x_max": max(x_coords),
+                "y_max": max(y_coords),
+                "points": list(zip(x_coords, y_coords)),
+            },
+        }
+
+        results.append(result)
+
+    # Print JSON
+    print("\nResults in JSON format:")
+    print("----------------------")
+    print(json.dumps(results, indent=2))
+
+    return results
+
+
 def process_image(
     image_path, saliency_net, text_detector, text_recognizer, gcn_net, output_path=None
 ):
@@ -170,18 +210,59 @@ def process_image(
     )
     kie_info = postprocess_write_info(merged_cells, preds)
 
+    # Display results in JSON format
+    display_results_json(merged_cells, preds, values)
+
     # Visualize results
     print("Visualizing results...")
-    visualize_results(warped_img, merged_cells, preds, values, boxes, output_path)
+    visualize_results(
+        img, warped_img, mask_img, merged_cells, preds, values, boxes, output_path
+    )
 
-    return kie_info, warped_img, merged_cells, preds, values, boxes
+    return kie_info, img, warped_img, merged_cells, preds, values, boxes
 
 
-def visualize_results(img, cells, preds, values, boxes, output_path=None):
-    """Visualize the predicted boxes and labels on the image"""
+def convert_warped_to_original_coords(warped_point, orig_img_shape, warped_img_shape):
+    """
+    Convert coordinates from the warped image back to the original image.
+
+    Args:
+        warped_point: The points detected in the warped image
+        orig_img_shape: Shape of the original image (height, width)
+        warped_img_shape: Shape of the warped image (height, width)
+
+    Returns:
+        A function that converts coordinates from warped to original image
+    """
+    # Get the transformation matrix from original to warped
+    maxWidth, maxHeight = get_max_hw(warped_point)
+    matrix = get_transform_matrix(warped_point, maxWidth, maxHeight)
+
+    # Get the inverse transformation matrix
+    inv_matrix = np.linalg.inv(matrix)
+
+    def convert_coords(x, y):
+        # Convert from warped to original coordinates
+        point = np.array([x, y, 1])
+        orig_point = np.dot(inv_matrix, point)
+        orig_point = orig_point / orig_point[2]
+
+        # Scale to original image dimensions
+        orig_x = int(orig_point[0] * orig_img_shape[1] / warped_img_shape[1])
+        orig_y = int(orig_point[1] * orig_img_shape[0] / warped_img_shape[0])
+
+        return orig_x, orig_y
+
+    return convert_coords
+
+
+def visualize_results(
+    orig_img, warped_img, mask_img, cells, preds, values, boxes, output_path=None
+):
+    """Visualize the predicted boxes and labels on the original image"""
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(12, 8))
-    ax.imshow(img)
+    ax.imshow(orig_img)
 
     # Define colors for different labels
     colors = {
@@ -196,6 +277,12 @@ def visualize_results(img, cells, preds, values, boxes, output_path=None):
         "OTHER": "gray",
     }
 
+    # Get the warped points for coordinate conversion
+    warped_point = get_largest_poly_with_coord(mask_img)
+    convert_coords = convert_warped_to_original_coords(
+        warped_point, orig_img.shape, warped_img.shape
+    )
+
     # Draw boxes and labels
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
@@ -203,13 +290,21 @@ def visualize_results(img, cells, preds, values, boxes, output_path=None):
         x_coords = [poly[j] for j in range(0, len(poly), 2)]
         y_coords = [poly[j] for j in range(1, len(poly), 2)]
 
+        # Convert coordinates from warped to original image
+        orig_x_coords = []
+        orig_y_coords = []
+        for x, y in zip(x_coords, y_coords):
+            orig_x, orig_y = convert_coords(x, y)
+            orig_x_coords.append(orig_x)
+            orig_y_coords.append(orig_y)
+
         # Get label
         label = cf.node_labels[pred]
         color = colors.get(label, "white")
 
         # Create polygon
         polygon = patches.Polygon(
-            np.column_stack((x_coords, y_coords)),
+            np.column_stack((orig_x_coords, orig_y_coords)),
             linewidth=2,
             edgecolor=color,
             facecolor="none",
@@ -222,8 +317,8 @@ def visualize_results(img, cells, preds, values, boxes, output_path=None):
         label_text = f"{label}: {text} ({value:.2f})"
 
         ax.text(
-            min(x_coords),
-            min(y_coords) - 10,
+            min(orig_x_coords),
+            min(orig_y_coords) - 10,
             label_text,
             color=color,
             fontsize=12,
@@ -268,7 +363,7 @@ def main():
         image_path = args.image
         output_path = args.output if args.output else "visualization_result.png"
 
-        kie_info, warped_img, cells, preds, values, boxes = process_image(
+        kie_info, orig_img, warped_img, cells, preds, values, boxes = process_image(
             image_path,
             saliency_net,
             text_detector,
@@ -311,7 +406,7 @@ def main():
         image_path = os.path.join(dataset_path, valid_image)
         output_path = args.output if args.output else "visualization_result.png"
 
-        kie_info, warped_img, cells, preds, values, boxes = process_image(
+        kie_info, orig_img, warped_img, cells, preds, values, boxes = process_image(
             image_path,
             saliency_net,
             text_detector,
