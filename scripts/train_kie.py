@@ -337,12 +337,23 @@ def main():
     train_dataset = KIEDataset("data/dataset/annotations/train.json")
     val_dataset = KIEDataset("data/dataset/annotations/val.json")
 
+    # Giảm batch_size để tránh quá tải bộ nhớ
+    batch_size = 2 if device.type == "cuda" else 4
+
     train_loader = DataLoader(
-        train_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn, num_workers=2
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=0,
     )
 
     val_loader = DataLoader(
-        val_dataset, batch_size=4, shuffle=False, collate_fn=collate_fn, num_workers=2
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=0,
     )
 
     # Initialize trainer
