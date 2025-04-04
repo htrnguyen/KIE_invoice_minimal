@@ -83,59 +83,65 @@ class GatedGCNLayer(nn.Module):
         # Đảm bảo graph ở trên CPU
         g = g.to("cpu")
 
+        # Tạo các phiên bản CPU của các layer
+        A_cpu = nn.Linear(self.A.in_features, self.A.out_features)
+        B_cpu = nn.Linear(self.B.in_features, self.B.out_features)
+        C_cpu = nn.Linear(self.C.in_features, self.C.out_features)
+        D_cpu = nn.Linear(self.D.in_features, self.D.out_features)
+        E_cpu = nn.Linear(self.E.in_features, self.E.out_features)
+
+        # Sao chép trọng số từ các layer gốc
+        A_cpu.weight.data = self.A.weight.data.clone().to("cpu")
+        if self.A.bias is not None:
+            A_cpu.bias.data = self.A.bias.data.clone().to("cpu")
+
+        B_cpu.weight.data = self.B.weight.data.clone().to("cpu")
+        if self.B.bias is not None:
+            B_cpu.bias.data = self.B.bias.data.clone().to("cpu")
+
+        C_cpu.weight.data = self.C.weight.data.clone().to("cpu")
+        if self.C.bias is not None:
+            C_cpu.bias.data = self.C.bias.data.clone().to("cpu")
+
+        D_cpu.weight.data = self.D.weight.data.clone().to("cpu")
+        if self.D.bias is not None:
+            D_cpu.bias.data = self.D.bias.data.clone().to("cpu")
+
+        E_cpu.weight.data = self.E.weight.data.clone().to("cpu")
+        if self.E.bias is not None:
+            E_cpu.bias.data = self.E.bias.data.clone().to("cpu")
+
         # Tính toán trên CPU
         g.ndata["h"] = h_cpu
-        g.ndata["Ah"] = self.A.weight.data.to("cpu") @ h_cpu.t()
-        if self.A.bias is not None:
-            g.ndata["Ah"] = g.ndata["Ah"].t() + self.A.bias.data.to("cpu")
-        else:
-            g.ndata["Ah"] = g.ndata["Ah"].t()
-
-        g.ndata["Bh"] = self.B.weight.data.to("cpu") @ h_cpu.t()
-        if self.B.bias is not None:
-            g.ndata["Bh"] = g.ndata["Bh"].t() + self.B.bias.data.to("cpu")
-        else:
-            g.ndata["Bh"] = g.ndata["Bh"].t()
-
-        g.ndata["Dh"] = self.D.weight.data.to("cpu") @ h_cpu.t()
-        if self.D.bias is not None:
-            g.ndata["Dh"] = g.ndata["Dh"].t() + self.D.bias.data.to("cpu")
-        else:
-            g.ndata["Dh"] = g.ndata["Dh"].t()
-
-        g.ndata["Eh"] = self.E.weight.data.to("cpu") @ h_cpu.t()
-        if self.E.bias is not None:
-            g.ndata["Eh"] = g.ndata["Eh"].t() + self.E.bias.data.to("cpu")
-        else:
-            g.ndata["Eh"] = g.ndata["Eh"].t()
-
+        g.ndata["Ah"] = A_cpu(h_cpu)
+        g.ndata["Bh"] = B_cpu(h_cpu)
+        g.ndata["Dh"] = D_cpu(h_cpu)
+        g.ndata["Eh"] = E_cpu(h_cpu)
         g.edata["e"] = e_cpu
-        g.edata["Ce"] = self.C.weight.data.to("cpu") @ e_cpu.t()
-        if self.C.bias is not None:
-            g.edata["Ce"] = g.edata["Ce"].t() + self.C.bias.data.to("cpu")
-        else:
-            g.edata["Ce"] = g.edata["Ce"].t()
+        g.edata["Ce"] = C_cpu(e_cpu)
 
         g.update_all(self.message_func, self.reduce_func)
 
         h = g.ndata["h"]
         e = g.edata["e"]
 
-        # Batch norm trên CPU
-        h = self.bn_node_h.weight.data.to("cpu") * (
-            h - self.bn_node_h.running_mean.to("cpu")
-        ) / torch.sqrt(
-            self.bn_node_h.running_var.to("cpu") + self.bn_node_h.eps
-        ) + self.bn_node_h.bias.data.to(
-            "cpu"
-        )
-        e = self.bn_node_e.weight.data.to("cpu") * (
-            e - self.bn_node_e.running_mean.to("cpu")
-        ) / torch.sqrt(
-            self.bn_node_e.running_var.to("cpu") + self.bn_node_e.eps
-        ) + self.bn_node_e.bias.data.to(
-            "cpu"
-        )
+        # Tạo phiên bản CPU của batch norm
+        bn_node_h_cpu = nn.BatchNorm1d(self.bn_node_h.num_features)
+        bn_node_e_cpu = nn.BatchNorm1d(self.bn_node_e.num_features)
+
+        # Sao chép trọng số từ batch norm gốc
+        bn_node_h_cpu.weight.data = self.bn_node_h.weight.data.clone().to("cpu")
+        bn_node_h_cpu.bias.data = self.bn_node_h.bias.data.clone().to("cpu")
+        bn_node_h_cpu.running_mean = self.bn_node_h.running_mean.clone().to("cpu")
+        bn_node_h_cpu.running_var = self.bn_node_h.running_var.clone().to("cpu")
+
+        bn_node_e_cpu.weight.data = self.bn_node_e.weight.data.clone().to("cpu")
+        bn_node_e_cpu.bias.data = self.bn_node_e.bias.data.clone().to("cpu")
+        bn_node_e_cpu.running_mean = self.bn_node_e.running_mean.clone().to("cpu")
+        bn_node_e_cpu.running_var = self.bn_node_e.running_var.clone().to("cpu")
+
+        h = bn_node_h_cpu(h)
+        e = bn_node_e_cpu(e)
 
         h = F.relu(h)
         e = F.relu(e)
@@ -465,22 +471,30 @@ class GatedGCNNet(nn.Module):
             else:
                 h = h[:, :expected_features]
 
+        # Tạo phiên bản CPU của các encoder
+        node_encoder_cpu = nn.Linear(
+            self.node_encoder.in_features, self.node_encoder.out_features
+        )
+        edge_encoder_cpu = nn.Linear(
+            self.edge_encoder.in_features, self.edge_encoder.out_features
+        )
+
+        # Sao chép trọng số từ các encoder gốc
+        node_encoder_cpu.weight.data = self.node_encoder.weight.data.clone().to("cpu")
+        if self.node_encoder.bias is not None:
+            node_encoder_cpu.bias.data = self.node_encoder.bias.data.clone().to("cpu")
+
+        edge_encoder_cpu.weight.data = self.edge_encoder.weight.data.clone().to("cpu")
+        if self.edge_encoder.bias is not None:
+            edge_encoder_cpu.bias.data = self.edge_encoder.bias.data.clone().to("cpu")
+
         # Chuyển features về CPU để xử lý với DGL
         h_cpu = h.to("cpu")
         e_cpu = e.to("cpu")
 
-        # Tính toán node và edge features trên CPU
-        h_cpu = self.node_encoder.weight.data.to("cpu") @ h_cpu.t()
-        if self.node_encoder.bias is not None:
-            h_cpu = h_cpu.t() + self.node_encoder.bias.data.to("cpu")
-        else:
-            h_cpu = h_cpu.t()
-
-        e_cpu = self.edge_encoder.weight.data.to("cpu") @ e_cpu.t()
-        if self.edge_encoder.bias is not None:
-            e_cpu = e_cpu.t() + self.edge_encoder.bias.data.to("cpu")
-        else:
-            e_cpu = e_cpu.t()
+        # Initial node and edge encoders trên CPU
+        h_cpu = node_encoder_cpu(h_cpu)
+        e_cpu = edge_encoder_cpu(e_cpu)
 
         # Apply dropout
         h_cpu = F.dropout(h_cpu, self.in_feat_dropout, training=self.training)
@@ -489,19 +503,24 @@ class GatedGCNNet(nn.Module):
         for conv in self.layers:
             h_cpu, e_cpu = conv(batch_graph, h_cpu, e_cpu)
 
-        # Output trên CPU
-        h_out_cpu = h_cpu
+        # Tạo phiên bản CPU của MLP layer
+        mlp_layers = []
         for layer in self.MLP_layer:
             if isinstance(layer, nn.Linear):
-                h_out_cpu = layer.weight.data.to("cpu") @ h_out_cpu.t()
+                linear_cpu = nn.Linear(layer.in_features, layer.out_features)
+                linear_cpu.weight.data = layer.weight.data.clone().to("cpu")
                 if layer.bias is not None:
-                    h_out_cpu = h_out_cpu.t() + layer.bias.data.to("cpu")
-                else:
-                    h_out_cpu = h_out_cpu.t()
+                    linear_cpu.bias.data = layer.bias.data.clone().to("cpu")
+                mlp_layers.append(linear_cpu)
             elif isinstance(layer, nn.Dropout):
-                h_out_cpu = F.dropout(h_out_cpu, layer.p, training=self.training)
-            elif isinstance(layer, nn.ReLU):
-                h_out_cpu = F.relu(h_out_cpu)
+                mlp_layers.append(nn.Dropout(layer.p))
+            else:
+                mlp_layers.append(layer)
+
+        # Output trên CPU
+        h_out_cpu = h_cpu
+        for layer in mlp_layers:
+            h_out_cpu = layer(h_out_cpu)
 
         # Chuyển kết quả về device ban đầu
         h_out = h_out_cpu.to(self.device)
