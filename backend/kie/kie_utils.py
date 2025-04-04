@@ -201,20 +201,45 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
     batch_boxes = []
     batch_texts = []
 
+    # Get image dimensions for normalization
+    all_x = []
+    all_y = []
+    for cell in merged_cells:
+        poly = cell.get("poly", [])
+        if isinstance(poly, np.ndarray):
+            poly = poly.tolist()
+        x_coords = poly[0::2]
+        y_coords = poly[1::2]
+        all_x.extend(x_coords)
+        all_y.extend(y_coords)
+
+    # Get image bounds
+    x_min, x_max = min(all_x), max(all_x)
+    y_min, y_max = min(all_y), max(all_y)
+
     # Process each cell
     for cell in merged_cells:
         # Extract text and box data
         text = cell.get("vietocr_text", "")
-        box = cell.get("poly", [])
+        poly = cell.get("poly", [])
+
+        if isinstance(poly, np.ndarray):
+            poly = poly.tolist()
+
+        # Normalize coordinates to 0-1000 range
+        normalized_poly = []
+        for i in range(0, len(poly), 2):
+            # Normalize x coordinate
+            x = int((poly[i] - x_min) * 1000 / (x_max - x_min))
+            # Normalize y coordinate
+            y = int((poly[i + 1] - y_min) * 1000 / (y_max - y_min))
+            normalized_poly.extend([x, y])
 
         # Convert text to tensor
         text_tensor = torch.tensor([ord(c) for c in text], dtype=torch.long)
 
-        # Convert box to tensor and ensure it's a float tensor
-        if isinstance(box, np.ndarray):
-            box_tensor = torch.from_numpy(box).float()
-        else:
-            box_tensor = torch.tensor(box, dtype=torch.float32)
+        # Convert box to tensor
+        box_tensor = torch.tensor(normalized_poly, dtype=torch.float32)
 
         batch_texts.append(text_tensor)
         batch_boxes.append(box_tensor)
