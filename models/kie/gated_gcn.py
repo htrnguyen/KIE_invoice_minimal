@@ -207,21 +207,45 @@ class GatedGCNNet(nn.Module):
             # Compute edge features (relative spatial information)
             e_feats = []
             for s, d in zip(src + list(range(n_nodes)), dst + list(range(n_nodes))):
-                box1 = boxes[i][s]
-                box2 = boxes[i][d]
+                box1 = boxes[i][s].to(self.device)
+                box2 = boxes[i][d].to(self.device)
 
                 # Calculate center points
                 center1 = torch.tensor(
                     [
-                        (box1[0] + box1[2] + box1[4] + box1[6]) / 4,
-                        (box1[1] + box1[3] + box1[5] + box1[7]) / 4,
+                        (
+                            box1[0].item()
+                            + box1[2].item()
+                            + box1[4].item()
+                            + box1[6].item()
+                        )
+                        / 4,
+                        (
+                            box1[1].item()
+                            + box1[3].item()
+                            + box1[5].item()
+                            + box1[7].item()
+                        )
+                        / 4,
                     ],
                     device=self.device,
                 )
                 center2 = torch.tensor(
                     [
-                        (box2[0] + box2[2] + box2[4] + box2[6]) / 4,
-                        (box2[1] + box2[3] + box2[5] + box2[7]) / 4,
+                        (
+                            box2[0].item()
+                            + box2[2].item()
+                            + box2[4].item()
+                            + box2[6].item()
+                        )
+                        / 4,
+                        (
+                            box2[1].item()
+                            + box2[3].item()
+                            + box2[5].item()
+                            + box2[7].item()
+                        )
+                        / 4,
                     ],
                     device=self.device,
                 )
@@ -243,12 +267,20 @@ class GatedGCNNet(nn.Module):
                     text = str(text_tensor)
                 text_list.append(text)
 
-                box = boxes[i][j]
+                box = boxes[i][j].to(self.device)
                 bbox = [
-                    int(min(box[0], box[2], box[4], box[6])),  # x0
-                    int(min(box[1], box[3], box[5], box[7])),  # y0
-                    int(max(box[0], box[2], box[4], box[6])),  # x1
-                    int(max(box[1], box[3], box[5], box[7])),  # y1
+                    int(
+                        min(box[0].item(), box[2].item(), box[4].item(), box[6].item())
+                    ),  # x0
+                    int(
+                        min(box[1].item(), box[3].item(), box[5].item(), box[7].item())
+                    ),  # y0
+                    int(
+                        max(box[0].item(), box[2].item(), box[4].item(), box[6].item())
+                    ),  # x1
+                    int(
+                        max(box[1].item(), box[3].item(), box[5].item(), box[7].item())
+                    ),  # y1
                 ]
                 bbox_list.append(bbox)
 
