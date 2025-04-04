@@ -320,18 +320,22 @@ def postprocess_write_info(merged_cells, preds, text_key="vietocr_text"):
     for i in range(1, len(cf.node_labels)):  # Skip 'OTHER' class
         indexes = np.where(preds == i)[0]
         if len(indexes) > 0:
-            # For label fields (MFG_LABEL, EXP_LABEL, WEIGHT_LABEL), we want to keep them separate
-            if cf.node_labels[i].endswith("_LABEL"):
-                text_output = " ".join(
-                    merged_cells[index][text_key] for index in indexes
-                )
-                kie_info[cf.node_labels[i]] = text_output
-            else:
-                # For value fields (MFG, EXP, WEIGHT), we want to concatenate them
-                text_output = " ".join(
-                    merged_cells[index][text_key] for index in indexes
-                )
-                kie_info[cf.node_labels[i]] = text_output
+            # Filter out invalid indices
+            valid_indexes = [idx for idx in indexes if idx < len(merged_cells)]
+
+            if len(valid_indexes) > 0:
+                # For label fields (MFG_LABEL, EXP_LABEL, WEIGHT_LABEL), we want to keep them separate
+                if cf.node_labels[i].endswith("_LABEL"):
+                    text_output = " ".join(
+                        merged_cells[index][text_key] for index in valid_indexes
+                    )
+                    kie_info[cf.node_labels[i]] = text_output
+                else:
+                    # For value fields (MFG, EXP, WEIGHT), we want to concatenate them
+                    text_output = " ".join(
+                        merged_cells[index][text_key] for index in valid_indexes
+                    )
+                    kie_info[cf.node_labels[i]] = text_output
 
     return kie_info
 
