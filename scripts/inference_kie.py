@@ -97,7 +97,12 @@ def run_saliency(net, img):
     img_tensor = (
         torch.from_numpy(img_resized).permute(2, 0, 1).unsqueeze(0).float() / 255.0
     )
-    img_tensor = img_tensor.to(net.device)
+
+    # Lấy device từ net nếu có, nếu không thì sử dụng device mặc định
+    device = getattr(
+        net, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    img_tensor = img_tensor.to(device)
 
     # Forward pass
     with torch.no_grad():
