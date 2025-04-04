@@ -9,6 +9,9 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
+import cv2
+import pytesseract
+from PIL import Image, ImageOps
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,9 +53,61 @@ def load_model(checkpoint_path):
 
 def preprocess_image(image_path):
     """Load and preprocess image"""
+    # Load image with PIL to preserve orientation
     image = Image.open(image_path)
+
+    # Get image dimensions
     width, height = image.size
-    return image, width, height
+
+    # Convert to numpy array for OpenCV processing
+    img_np = np.array(image)
+
+    return image, img_np, width, height
+
+
+def extract_text_from_bbox(image, bbox):
+    """Extract text from a bounding box using OCR"""
+    # Convert bbox coordinates to integers
+    x_coords = [int(bbox[j]) for j in range(0, len(bbox), 2)]
+    y_coords = [int(bbox[j]) for j in range(1, len(bbox), 2)]
+
+    # Get bounding box coordinates
+    x_min, x_max = min(x_coords), max(x_coords)
+    y_min, y_max = min(y_coords), max(y_coords)
+
+    # Ensure coordinates are within image bounds
+    x_min = max(0, x_min)
+    y_min = max(0, y_min)
+    x_max = min(image.shape[1], x_max)
+    y_max = min(image.shape[0], y_max)
+
+    # Extract region of interest
+    roi = image[y_min:y_max, x_min:x_max]
+
+    # Check if ROI is empty
+    if roi.size == 0:
+        return ""
+
+    # Convert to grayscale
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+    # Apply thresholding to preprocess the image
+    gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+    # Apply dilation to connect text components
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    gray = cv2.dilate(gray, kernel, iterations=1)
+
+    # Apply median blur to smooth image
+    gray = cv2.medianBlur(gray, 3)
+
+    # Apply OCR
+    try:
+        text = pytesseract.image_to_string(gray, config="--psm 6")
+        return text.strip()
+    except Exception as e:
+        print(f"OCR error: {e}")
+        return ""
 
 
 def predict(model, boxes, texts, device="cpu"):
@@ -87,8 +142,13 @@ def visualize_results(
 ):
     """Visualize the predicted boxes and labels on the image and save to file"""
     # Load image
-    img = Image.open(image_path)
-    img = np.array(img)
+    image = Image.open(image_path)
+
+    # Preserve image orientation
+    image = ImageOps.exif_transpose(image)
+
+    # Convert to numpy array
+    img = np.array(image)
 
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -188,6 +248,9 @@ def main():
     parser.add_argument(
         "--output", type=str, help="Output path for visualization (e.g., result.png)"
     )
+    parser.add_argument(
+        "--ocr", action="store_true", help="Use OCR to extract text from bounding boxes"
+    )
     args = parser.parse_args()
 
     # Set default output path if not provided
@@ -203,7 +266,8 @@ def main():
         print(f"Processing specified image: {image_path}")
 
         try:
-            image, width, height = preprocess_image(image_path)
+            # Load and preprocess image
+            image, img_np, width, height = preprocess_image(image_path)
             print(f"Image size: {width}x{height}")
 
             # For images without annotations, we need to extract boxes and texts
@@ -240,11 +304,22 @@ def main():
             boxes.append(box2_pixels)
             boxes.append(box3_pixels)
 
-            # Example texts (in a real application, these would come from OCR)
-            # For demonstration, we'll use placeholder texts
-            text1 = "EXAMPLE TEXT 1"
-            text2 = "EXAMPLE TEXT 2"
-            text3 = "EXAMPLE TEXT 3"
+            # Use OCR to extract text from bounding boxes if requested
+            if args.ocr:
+                print("Using OCR to extract text from bounding boxes...")
+                text1 = extract_text_from_bbox(img_np, box1_pixels)
+                text2 = extract_text_from_bbox(img_np, box2_pixels)
+                text3 = extract_text_from_bbox(img_np, box3_pixels)
+
+                print(f"Extracted text from box 1: '{text1}'")
+                print(f"Extracted text from box 2: '{text2}'")
+                print(f"Extracted text from box 3: '{text3}'")
+            else:
+                # Example texts (in a real application, these would come from OCR)
+                # For demonstration, we'll use placeholder texts
+                text1 = "EXAMPLE TEXT 1"
+                text2 = "EXAMPLE TEXT 2"
+                text3 = "EXAMPLE TEXT 3"
 
             # Encode texts
             def encode_text(text, max_length=50):
@@ -325,7 +400,8 @@ def main():
         print(f"Processing image: {image_path}")
 
         try:
-            image, width, height = preprocess_image(image_path)
+            # Load and preprocess image
+            image, img_np, width, height = preprocess_image(image_path)
             print(f"Image size: {width}x{height}")
 
             # Find annotation for this image
@@ -341,12 +417,22 @@ def main():
             boxes = []
             texts = []
             true_labels = []
+            extracted_texts = []
+
             for box in annotation["boxes"]:
                 # Convert normalized coordinates back to pixel coordinates
                 coords = np.array(box["poly"], dtype=np.float32)
                 coords[0::2] = coords[0::2] * width  # x coordinates
                 coords[1::2] = coords[1::2] * height  # y coordinates
                 boxes.append(coords.tolist())
+
+                # Use OCR to extract text if requested
+                if args.ocr:
+                    extracted_text = extract_text_from_bbox(img_np, coords.tolist())
+                    extracted_texts.append(extracted_text)
+                    print(
+                        f"Extracted text: '{extracted_text}' (Original: '{box['text']}')"
+                    )
 
                 # Encode text
                 text = box["text"]
@@ -376,6 +462,8 @@ def main():
                 print(f"Box {i+1}:")
                 print(f"  Coordinates: {box}")
                 print(f"  Text: {annotation['boxes'][i]['text']}")
+                if args.ocr and i < len(extracted_texts):
+                    print(f"  OCR Text: {extracted_texts[i]}")
                 print(f"  True label: {annotation['boxes'][i]['label']}")
                 print(f"  Predicted label: {label}")
                 print("------------------")
