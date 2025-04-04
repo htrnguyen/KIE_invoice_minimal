@@ -56,16 +56,24 @@ def predict(model, boxes, texts, device="cpu"):
     model = model.to(device)
 
     with torch.no_grad():
-        # Convert inputs to tensors
-        boxes = [torch.tensor(box, dtype=torch.float32) for box in boxes]
-        texts = [torch.tensor(text, dtype=torch.long) for text in texts]
+        # Convert inputs to tensors and ensure they are on the correct device
+        boxes = [torch.tensor(box, dtype=torch.float32).to(device) for box in boxes]
+        texts = [torch.tensor(text, dtype=torch.long).to(device) for text in texts]
 
         # Forward pass
         outputs = model(boxes, texts)
+
+        # Get predictions
         predictions = torch.argmax(outputs, dim=1)
 
         # Convert predictions to labels
-        labels = [cf.node_labels[pred.item()] for pred in predictions]
+        labels = []
+        for pred in predictions:
+            pred_idx = pred.item()  # Convert 0-dim tensor to Python scalar
+            if 0 <= pred_idx < len(cf.node_labels):
+                labels.append(cf.node_labels[pred_idx])
+            else:
+                labels.append("UNKNOWN")
 
     return labels
 
@@ -165,6 +173,9 @@ def main():
 
     except Exception as e:
         print(f"Error processing image: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
