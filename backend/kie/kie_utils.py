@@ -248,6 +248,21 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
         text_tensor = torch.tensor(text_encode, dtype=torch.long).to(device)
         batch_texts.append(text_tensor)
 
+    # Nếu không có cell nào, trả về kết quả rỗng
+    if not batch_boxes:
+        return np.array([]), []
+
+    # Nếu chỉ có 1 cell, thêm một cell giả để tránh lỗi
+    if len(batch_boxes) == 1:
+        # Tạo box giả với tọa độ khác biệt
+        fake_box = batch_boxes[0].clone()
+        fake_box[0] += 1.0  # Dịch chuyển 1 đơn vị theo trục x
+        batch_boxes.append(fake_box)
+
+        # Tạo text giả
+        fake_text = batch_texts[0].clone()
+        batch_texts.append(fake_text)
+
     # Run inference
     with torch.no_grad():
         scores = gcn_net(batch_boxes, batch_texts)
