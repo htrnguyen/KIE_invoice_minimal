@@ -266,6 +266,7 @@ class GatedGCNNet(nn.Module):
         all_edge_features = []
         all_graphs = []
         original_node_counts = []  # Lưu số lượng node ban đầu
+        fake_node_indices = []  # Lưu vị trí của các node giả
 
         for i in range(batch_size):
             num_nodes = boxes[i].size(0)
@@ -294,6 +295,9 @@ class GatedGCNNet(nn.Module):
                 )
                 num_nodes = 2
                 fake_node_added = True
+                fake_node_indices.append(
+                    len(all_node_features) + 1
+                )  # Lưu vị trí của node giả
 
             # Tạo edge features từ tương đối vị trí
             edge_features = []
@@ -454,11 +458,24 @@ class GatedGCNNet(nn.Module):
         # MLP layers
         h = self.MLP_layer(h)
 
-        # Nếu chúng ta đã thêm node giả, chỉ trả về kết quả cho các node thật
-        if fake_node_added:
-            h = h[:1]  # Chỉ lấy kết quả cho node đầu tiên
+        # Tạo tensor kết quả với kích thước phù hợp
+        # Tính tổng số node thật (không bao gồm node giả)
+        total_real_nodes = sum(original_node_counts)
 
-        return h
+        # Tạo tensor kết quả với kích thước phù hợp
+        result = torch.zeros((total_real_nodes, self.n_classes), device=device)
+
+        # Điền kết quả vào tensor
+        start_idx = 0
+        for i, count in enumerate(original_node_counts):
+            # Nếu có node giả, chỉ lấy kết quả cho node thật
+            if i in fake_node_indices:
+                result[start_idx : start_idx + count] = h[i][:count]
+            else:
+                result[start_idx : start_idx + count] = h[i]
+            start_idx += count
+
+        return result
 
     def loss(self, pred, label):
         criterion = nn.CrossEntropyLoss()
