@@ -263,17 +263,32 @@ def visualize_results(
     orig_img, warped_img, mask_img, cells, preds, values, boxes, output_path=None
 ):
     """Visualize the predicted boxes and labels on the original image"""
-    # Create figure and axes
-    fig, ax = plt.subplots(figsize=(12, 8))
-
-    # Hiển thị ảnh gốc - chuyển từ BGR sang RGB nếu cần
+    # Chuyển đổi BGR sang RGB nếu cần
     if len(orig_img.shape) == 3 and orig_img.shape[2] == 3:
-        # Kiểm tra xem ảnh có phải là BGR không
         if orig_img[0, 0, 0] > orig_img[0, 0, 2]:  # Nếu kênh Blue > Red
             orig_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
 
-    # Hiển thị ảnh với orientation đúng
-    ax.imshow(orig_img, aspect="equal")
+    # Xoay ảnh về đúng chiều dọc nếu đang nằm ngang
+    h, w = orig_img.shape[:2]
+    if w > h:  # Nếu ảnh đang nằm ngang
+        orig_img = cv2.rotate(orig_img, cv2.ROTATE_90_CLOCKWISE)
+        # Cập nhật lại tọa độ của các box
+        for cell in cells:
+            poly = cell["poly"]
+            for i in range(0, len(poly), 2):
+                x, y = poly[i], poly[i + 1]
+                # Xoay tọa độ 90 độ
+                poly[i] = y
+                poly[i + 1] = w - x
+
+    # Create figure and axes với tỷ lệ phù hợp với ảnh
+    h, w = orig_img.shape[:2]
+    fig_width = 8
+    fig_height = fig_width * (h / w)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Hiển thị ảnh
+    ax.imshow(orig_img)
 
     # Define colors for different labels
     colors = {
@@ -323,18 +338,11 @@ def visualize_results(
         )
 
     plt.axis("off")
-    plt.tight_layout()
+    plt.tight_layout(pad=0)
 
     # Save figure to file if output_path is provided
     if output_path:
-        # Lưu hình với orientation đúng
-        plt.savefig(
-            output_path,
-            dpi=300,
-            bbox_inches="tight",
-            pad_inches=0,
-            orientation="portrait",
-        )
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0)
         print(f"Ảnh đã được lưu tại: {output_path}")
     else:
         # Try to display the figure
@@ -344,13 +352,7 @@ def visualize_results(
             print(f"Could not display figure: {e}")
             print("Saving to default location instead...")
             default_path = "visualization_result.png"
-            plt.savefig(
-                default_path,
-                dpi=300,
-                bbox_inches="tight",
-                pad_inches=0,
-                orientation="portrait",
-            )
+            plt.savefig(default_path, dpi=300, bbox_inches="tight", pad_inches=0)
             print(f"Visualization saved to: {default_path}")
 
     plt.close()
