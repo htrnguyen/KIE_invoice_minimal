@@ -337,27 +337,7 @@ def visualize_results(
 
     # Save figure to file if output_path is provided
     if output_path:
-        # Lưu ảnh tạm thời
-        temp_path = "temp_visualization.png"
-        plt.savefig(temp_path, dpi=300, bbox_inches="tight", pad_inches=0)
-        plt.close()
-
-        # Đọc ảnh đã lưu
-        saved_img = cv2.imread(temp_path)
-
-        # Kiểm tra orientation của ảnh gốc
-        orig_h, orig_w = orig_img.shape[:2]
-        if orig_w > orig_h:  # Nếu ảnh gốc là landscape
-            # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ và thêm 180 độ
-            saved_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-            saved_img = cv2.rotate(saved_img, cv2.ROTATE_180)
-
-        # Lưu ảnh đã xoay
-        cv2.imwrite(output_path, saved_img)
-
-        # Xóa file tạm
-        os.remove(temp_path)
-
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0)
         print(f"Ảnh đã được lưu tại: {output_path}")
     else:
         # Try to display the figure
@@ -367,28 +347,7 @@ def visualize_results(
             print(f"Could not display figure: {e}")
             print("Saving to default location instead...")
             default_path = "visualization_result.png"
-
-            # Lưu ảnh tạm thời
-            temp_path = "temp_visualization.png"
-            plt.savefig(temp_path, dpi=300, bbox_inches="tight", pad_inches=0)
-            plt.close()
-
-            # Đọc ảnh đã lưu
-            saved_img = cv2.imread(temp_path)
-
-            # Kiểm tra orientation của ảnh gốc
-            orig_h, orig_w = orig_img.shape[:2]
-            if orig_w > orig_h:  # Nếu ảnh gốc là landscape
-                # Xoay ảnh kết quả 90 độ ngược chiều kim đồng hồ và thêm 180 độ
-                saved_img = cv2.rotate(saved_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                saved_img = cv2.rotate(saved_img, cv2.ROTATE_180)
-
-            # Lưu ảnh đã xoay
-            cv2.imwrite(default_path, saved_img)
-
-            # Xóa file tạm
-            os.remove(temp_path)
-
+            plt.savefig(default_path, dpi=300, bbox_inches="tight", pad_inches=0)
             print(f"Visualization saved to: {default_path}")
 
     plt.close()
