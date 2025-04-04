@@ -11,7 +11,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from torchvision import models
-from torchvision.models.vgg import model_urls
+
+# Fix for newer torchvision versions
+try:
+    from torchvision.models.vgg import model_urls
+except ImportError:
+    # For newer torchvision versions, model_urls is not directly available
+    model_urls = {
+        "vgg11": "https://download.pytorch.org/models/vgg11-bbd30acd.pth",
+        "vgg13": "https://download.pytorch.org/models/vgg13-c768596a.pth",
+        "vgg16": "https://download.pytorch.org/models/vgg16-397923af.pth",
+        "vgg19": "https://download.pytorch.org/models/vgg19-dcbb9e9d.pth",
+        "vgg11_bn": "https://download.pytorch.org/models/vgg11_bn-c60001e0.pth",
+        "vgg13_bn": "https://download.pytorch.org/models/vgg13_bn-abd245e5.pth",
+        "vgg16_bn": "https://download.pytorch.org/models/vgg16_bn-6c64b313.pth",
+        "vgg19_bn": "https://download.pytorch.org/models/vgg19_bn-c79401a0.pth",
+    }
 
 
 def init_weights(modules):
