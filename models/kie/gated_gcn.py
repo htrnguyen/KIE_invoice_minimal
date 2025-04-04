@@ -179,25 +179,19 @@ class GatedGCNNet(nn.Module):
 
     def __init__(self, net_params):
         super().__init__()
-        # Convert string device to torch.device object
-        self.device = torch.device(net_params.get("device", "cpu"))
-        self.use_cuda = self.device.type == "cuda"
-
-        # DGL luôn chạy trên CPU
-        self.dgl_device = torch.device("cpu")
-
-        in_dim_text = net_params["in_dim_text"]
-        in_dim_node = net_params["in_dim_node"]
-        in_dim_edge = net_params["in_dim_edge"]
-        hidden_dim = net_params["hidden_dim"]
-        out_dim = net_params["out_dim"]
-        n_classes = net_params["n_classes"]
-        dropout = net_params["dropout"]
-        n_layers = net_params["L"]
-        self.readout = net_params["readout"]
-        self.batch_norm = net_params["batch_norm"]
-        self.residual = net_params["residual"]
-        self.in_feat_dropout = net_params["in_feat_dropout"]
+        self.device = net_params.get("device", "cpu")
+        self.in_dim_text = net_params.get("in_dim_text", 768)
+        self.in_dim_node = net_params.get("in_dim_node", 8)
+        self.in_dim_edge = net_params.get("in_dim_edge", 2)
+        self.hidden_dim = net_params.get("hidden_dim", 256)
+        self.out_dim = net_params.get("out_dim", 128)
+        self.n_classes = net_params.get("n_classes", 10)
+        self.dropout = net_params.get("dropout", 0.1)
+        self.L = net_params.get("L", 5)
+        self.readout = net_params.get("readout", "mean")
+        self.batch_norm = net_params.get("batch_norm", True)
+        self.residual = net_params.get("residual", True)
+        self.in_feat_dropout = net_params.get("in_feat_dropout", 0.1)
 
         # LayoutXLM for text feature extraction
         self.layoutxlm = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
@@ -210,20 +204,31 @@ class GatedGCNNet(nn.Module):
         self.tokenizer.model_max_length = 512
 
         # Node and edge encoders
-        self.node_encoder = nn.Linear(in_dim_node + in_dim_text, hidden_dim)
-        self.edge_encoder = nn.Linear(in_dim_edge, hidden_dim)
+        self.node_encoder = nn.Linear(
+            self.in_dim_node + self.in_dim_text, self.hidden_dim
+        )
+        self.edge_encoder = nn.Linear(self.in_dim_edge, self.hidden_dim)
 
         # GatedGCN layers
         self.layers = nn.ModuleList(
-            [GatedGCNLayer(hidden_dim, hidden_dim) for _ in range(n_layers)]
+            [
+                GatedGCNLayer(
+                    self.hidden_dim,
+                    self.hidden_dim,
+                    dropout=self.dropout,
+                    batch_norm=self.batch_norm,
+                    residual=self.residual,
+                )
+                for _ in range(self.L)
+            ]
         )
 
-        # Output layers
+        # MLP layers
         self.MLP_layer = nn.Sequential(
-            nn.Linear(hidden_dim, out_dim),
+            nn.Linear(self.hidden_dim, 128),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(out_dim, n_classes),
+            nn.Dropout(0.1),
+            nn.Linear(128, self.n_classes),
         )
 
         # Move all layers to device
@@ -235,7 +240,6 @@ class GatedGCNNet(nn.Module):
             device = torch.device(device)
         super().to(device)
         self.device = device
-        self.use_cuda = device.type == "cuda"
 
         # Move LayoutXLM to device
         self.layoutxlm = self.layoutxlm.to(device)
@@ -296,7 +300,7 @@ class GatedGCNNet(nn.Module):
                 num_nodes = 2
                 fake_node_added = True
                 fake_node_indices.append(
-                    len(all_node_features) + 1
+                    len(all_node_features)
                 )  # Lưu vị trí của node giả
 
             # Tạo edge features từ tương đối vị trí
