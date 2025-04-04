@@ -427,6 +427,24 @@ class GatedGCNNet(nn.Module):
         # Đảm bảo h nằm trên cùng device với MLP_layer
         h = h.to(device)
 
+        # Kiểm tra kích thước của h và MLP_layer
+        print(f"h shape before MLP: {h.shape}")
+        print(f"MLP_layer first layer weight shape: {self.MLP_layer[0].weight.shape}")
+
+        # Điều chỉnh kích thước của MLP_layer nếu cần
+        if h.shape[1] != self.MLP_layer[0].in_features:
+            print(
+                f"Adjusting MLP_layer input size from {self.MLP_layer[0].in_features} to {h.shape[1]}"
+            )
+            # Tạo MLP layer mới với kích thước phù hợp
+            out_features = self.MLP_layer[-1].out_features
+            self.MLP_layer = nn.Sequential(
+                nn.Linear(h.shape[1], 128),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(128, out_features),
+            ).to(device)
+
         # MLP layers
         h = self.MLP_layer(h)
 
