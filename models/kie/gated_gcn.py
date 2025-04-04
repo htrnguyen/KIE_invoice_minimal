@@ -277,6 +277,7 @@ class GatedGCNNet(nn.Module):
             # Đảm bảo node_features là tensor 2 chiều
             if node_features.dim() == 1:
                 node_features = node_features.unsqueeze(0)  # Thêm dimension cho batch
+                num_nodes = 1
 
             # Nếu chỉ có 1 node, tạo thêm 1 node giả để có thể tạo edge
             if num_nodes == 1:
@@ -332,19 +333,23 @@ class GatedGCNNet(nn.Module):
             text_features = []
             for j in range(num_nodes):
                 # Kiểm tra kích thước của texts[i][j]
-                if texts[i][j].dim() == 0:  # Nếu là scalar
-                    text_tensor = texts[i][j].unsqueeze(0)  # Thêm dimension
+                if j >= len(texts[i]):
+                    # Nếu không đủ text, tạo text giả
+                    text_tensor = torch.zeros(2, device=device)
                 else:
-                    text_tensor = texts[i][j]
+                    if texts[i][j].dim() == 0:  # Nếu là scalar
+                        text_tensor = texts[i][j].unsqueeze(0)  # Thêm dimension
+                    else:
+                        text_tensor = texts[i][j]
 
-                # Đảm bảo text_tensor có kích thước phù hợp
-                if text_tensor.size(0) < 2:
-                    # Nếu kích thước nhỏ hơn 2, thêm padding
-                    padding = torch.zeros(2 - text_tensor.size(0), device=device)
-                    text_tensor = torch.cat([text_tensor, padding])
+                    # Đảm bảo text_tensor có kích thước phù hợp
+                    if text_tensor.size(0) < 2:
+                        # Nếu kích thước nhỏ hơn 2, thêm padding
+                        padding = torch.zeros(2 - text_tensor.size(0), device=device)
+                        text_tensor = torch.cat([text_tensor, padding])
 
-                # Lấy 2 phần tử đầu tiên
-                text_tensor = text_tensor[:2]
+                    # Lấy 2 phần tử đầu tiên
+                    text_tensor = text_tensor[:2]
 
                 # Thêm vào text_features
                 text_features.append(text_tensor)
