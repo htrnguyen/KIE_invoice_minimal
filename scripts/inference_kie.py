@@ -82,10 +82,16 @@ def load_models():
 
 def run_saliency(net, img):
     """Run saliency detection to remove background"""
-    img = resize_and_pad(img, size=1024, pad=False)
+    # Store original image dimensions
+    orig_h, orig_w = img.shape[:2]
+
+    # Resize image for model input
+    img_resized = resize_and_pad(img, size=1024, pad=False)
 
     # Convert to tensor
-    img_tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    img_tensor = (
+        torch.from_numpy(img_resized).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    )
     img_tensor = img_tensor.to(cf.device)
 
     # Forward pass
@@ -96,6 +102,13 @@ def run_saliency(net, img):
 
     # Threshold
     mask = pred > cf.saliency_ths
+
+    # Resize mask back to original image dimensions
+    mask = cv2.resize(
+        mask.astype(np.float32), (orig_w, orig_h), interpolation=cv2.INTER_LINEAR
+    )
+    mask = mask > 0.5  # Re-threshold after resizing
+
     return mask.astype(np.uint8)
 
 
