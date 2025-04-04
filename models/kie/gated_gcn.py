@@ -278,6 +278,16 @@ class GatedGCNNet(nn.Module):
             if node_features.dim() == 1:
                 node_features = node_features.unsqueeze(0)  # Thêm dimension cho batch
 
+            # Nếu chỉ có 1 node, tạo thêm 1 node giả để có thể tạo edge
+            if num_nodes == 1:
+                # Tạo node giả với tọa độ khác biệt
+                fake_node = node_features[0].clone()
+                fake_node[0] += 1.0  # Dịch chuyển 1 đơn vị theo trục x
+                node_features = torch.cat(
+                    [node_features, fake_node.unsqueeze(0)], dim=0
+                )
+                num_nodes = 2
+
             # Tạo edge features từ tương đối vị trí
             edge_features = []
             edge_index = []
