@@ -133,7 +133,10 @@ class Trainer:
         correct = 0
         total = 0
 
-        pbar = tqdm(self.train_loader, desc="Training")
+        # Lấy thông tin epoch hiện tại từ scheduler
+        current_epoch = self.scheduler.last_epoch + 1
+
+        pbar = tqdm(self.train_loader, desc=f"Epoch {current_epoch}")
         for batch in pbar:
             # Move data to device
             boxes = [b.to(self.device) for b in batch["boxes"]]
@@ -168,8 +171,13 @@ class Trainer:
         correct = 0
         total = 0
 
+        # Lấy thông tin epoch hiện tại từ scheduler
+        current_epoch = self.scheduler.last_epoch + 1
+
         with torch.no_grad():
-            for batch in tqdm(self.val_loader, desc="Validating"):
+            for batch in tqdm(
+                self.val_loader, desc=f"Validating Epoch {current_epoch}"
+            ):
                 # Move data to device
                 boxes = [b.to(self.device) for b in batch["boxes"]]
                 texts = [t.to(self.device) for t in batch["texts"]]
@@ -190,20 +198,20 @@ class Trainer:
         return val_loss, val_acc
 
     def train(self, num_epochs, checkpoint_dir):
+        print(f"\nTraining for {num_epochs} epochs...")
+        print("=" * 50)
+
         for epoch in range(num_epochs):
-            logging.info(f"\nEpoch {epoch+1}/{num_epochs}")
+            print(f"\nEpoch {epoch+1}/{num_epochs}")
+            print("-" * 30)
 
             # Training
             train_loss, train_acc = self.train_epoch()
-            logging.info(
-                f"Training - Loss: {train_loss:.4f}, Accuracy: {train_acc*100:.2f}%"
-            )
+            print(f"Training - Loss: {train_loss:.4f}, Accuracy: {train_acc*100:.2f}%")
 
             # Validation
             val_loss, val_acc = self.validate()
-            logging.info(
-                f"Validation - Loss: {val_loss:.4f}, Accuracy: {val_acc*100:.2f}%"
-            )
+            print(f"Validation - Loss: {val_loss:.4f}, Accuracy: {val_acc*100:.2f}%")
 
             # Learning rate scheduling
             self.scheduler.step(val_loss)
@@ -218,6 +226,9 @@ class Trainer:
             # Regular checkpoint saving
             if (epoch + 1) % 5 == 0:
                 self.save_checkpoint(epoch, val_loss, val_acc, checkpoint_dir)
+
+        print("\nTraining completed!")
+        print("=" * 50)
 
     def save_checkpoint(self, epoch, val_loss, val_acc, checkpoint_dir, is_best=False):
         checkpoint = {

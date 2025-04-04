@@ -134,17 +134,25 @@ def display_results_json(cells, preds, values):
     """Display the results in JSON format"""
     results = []
 
+    print("\nDetailed Results:")
+    print("-" * 30)
+
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
         poly = cell["poly"]
         x_coords = [float(poly[j]) for j in range(0, len(poly), 2)]
         y_coords = [float(poly[j]) for j in range(1, len(poly), 2)]
 
-        # Get label
+        # Get label and text
         label = cf.node_labels[pred]
-
-        # Get text
         text = cell.get("vietocr_text", "")
+
+        # Print detection info
+        print(f"Detection {i+1}:")
+        print(f"  Label: {label}")
+        print(f"  Text: {text}")
+        print(f"  Confidence: {value:.2f}")
+        print()
 
         # Create result object
         result = {
@@ -162,11 +170,6 @@ def display_results_json(cells, preds, values):
 
         results.append(result)
 
-    # Print JSON
-    print("\nResults in JSON format:")
-    print("----------------------")
-    print(json.dumps(results, indent=2))
-
     return results
 
 
@@ -174,22 +177,28 @@ def process_image(
     image_path, saliency_net, text_detector, text_recognizer, gcn_net, output_path=None
 ):
     """Process image through the complete KIE pipeline"""
+    # Suppress warnings
+    import warnings
+
+    warnings.filterwarnings("ignore")
+
     # Load image
     img = imageio.imread(image_path)
-    print(f"Processing image: {image_path}")
-    print(f"Image size: {img.shape}")
+    print(f"\nProcessing: {os.path.basename(image_path)}")
+    print("=" * 50)
 
     # 1. Background subtraction
-    print("Step 1: Background subtraction...")
+    print("\n1. Background Removal & Text Detection")
+    print("-" * 30)
     mask_img = run_saliency(saliency_net, img)
     img[~mask_img.astype(bool)] = 0.0
 
     # 2. Image alignment
-    print("Step 2: Image alignment...")
     warped_img = make_warp_img(img, mask_img)
 
     # 3 & 4. Text detection and recognition
-    print("Step 3 & 4: Text detection and recognition...")
+    print("\n2. Text Recognition")
+    print("-" * 30)
     cells, heatmap, textboxes = run_ocr(
         text_detector, text_recognizer, warped_img, cf.craft_config
     )
@@ -204,7 +213,8 @@ def process_image(
     )
 
     # 5. Key Information Extraction
-    print("Step 5: Key Information Extraction...")
+    print("\n3. Information Extraction")
+    print("-" * 30)
     batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
 
     # Post-process scores
@@ -213,11 +223,15 @@ def process_image(
     )
     kie_info = postprocess_write_info(merged_cells, preds)
 
-    # Display results in JSON format
-    display_results_json(merged_cells, preds, values)
+    # Display results
+    print("\nExtracted Information:")
+    print("-" * 30)
+    for key, value in kie_info.items():
+        print(f"{key}: {value}")
 
     # Visualize results
-    print("Visualizing results...")
+    print("\nVisualizing Results:")
+    print("-" * 30)
     visualize_results(
         img, warped_img, mask_img, merged_cells, preds, values, boxes, output_path
     )
@@ -354,6 +368,11 @@ def visualize_results(
 
 
 def main():
+    # Suppress warnings
+    import warnings
+
+    warnings.filterwarnings("ignore")
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Run KIE inference on an image")
     parser.add_argument("--image", type=str, help="Path to the image file")
@@ -379,11 +398,6 @@ def main():
             output_path,
         )
 
-        # Print extracted information
-        print("\nExtracted Information:")
-        print("----------------------")
-        for key, value in kie_info.items():
-            print(f"{key}: {value}")
     else:
         # Find a valid image from the dataset
         dataset_path = "data/images"
@@ -421,12 +435,6 @@ def main():
             gcn_net,
             output_path,
         )
-
-        # Print extracted information
-        print("\nExtracted Information:")
-        print("----------------------")
-        for key, value in kie_info.items():
-            print(f"{key}: {value}")
 
 
 if __name__ == "__main__":
