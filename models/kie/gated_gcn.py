@@ -418,10 +418,32 @@ class GatedGCNNet(nn.Module):
         h = torch.cat(node_features, dim=0).to(self.device)
         e = torch.cat(edge_features, dim=0).to(self.device)
 
+        # Print shapes for debugging
+        print(f"h shape before reshape: {h.shape}")
+        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
+
         # Ensure h has the correct shape
         if h.size(0) != batch_graph.num_nodes():
             # Reshape h to match the number of nodes
             h = h.view(batch_graph.num_nodes(), -1)
+
+        # Ensure h has the correct number of features
+        expected_features = self.node_encoder.weight.size(1)  # 776
+        if h.size(1) != expected_features:
+            # Pad or truncate h to match expected features
+            if h.size(1) < expected_features:
+                # Pad with zeros
+                padding = torch.zeros(
+                    h.size(0), expected_features - h.size(1), device=self.device
+                )
+                h = torch.cat([h, padding], dim=1)
+            else:
+                # Truncate
+                h = h[:, :expected_features]
+
+        # Print shapes for debugging
+        print(f"h shape after reshape: {h.shape}")
+        print(f"node_encoder weight shape: {self.node_encoder.weight.shape}")
 
         # Initial node and edge encoders
         h = self.node_encoder(h)
