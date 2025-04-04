@@ -324,10 +324,12 @@ class GatedGCNNet(nn.Module):
             edge_features = torch.stack(edge_features)  # [num_edges, 2]
             edge_index = torch.tensor(edge_index, device=device).t()  # [2, num_edges]
 
-            # Tạo DGL graph
-            g = dgl.graph((edge_index[0], edge_index[1]), num_nodes=num_nodes)
-            g.ndata["feat"] = node_features
-            g.edata["feat"] = edge_features
+            # Tạo DGL graph trên CPU
+            g = dgl.graph(
+                (edge_index[0].cpu(), edge_index[1].cpu()), num_nodes=num_nodes
+            )
+            g.ndata["feat"] = node_features.cpu()  # Chuyển node features về CPU
+            g.edata["feat"] = edge_features.cpu()  # Chuyển edge features về CPU
 
             # Xử lý text features
             text_features = []
@@ -373,7 +375,7 @@ class GatedGCNNet(nn.Module):
         node_features = torch.cat(all_node_features, dim=0)  # [total_nodes, 10]
         edge_features = torch.cat(all_edge_features, dim=0)  # [total_edges, 2]
 
-        # Tạo batch graph
+        # Tạo batch graph trên CPU
         batch_graph = dgl.batch(all_graphs)
 
         # Forward qua GatedGCN layers
