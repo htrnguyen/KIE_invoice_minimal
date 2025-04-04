@@ -196,9 +196,12 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
     dgl_device = "cpu"
 
     # Prepare data for the model
-    texts = []
-    boxes = []
+    # The model expects a list of tensors for each batch
+    # We'll create a single batch with all cells
+    batch_boxes = []
+    batch_texts = []
 
+    # Process each cell
     for cell in merged_cells:
         # Extract text and box data
         text = cell.get("vietocr_text", "")
@@ -210,13 +213,17 @@ def run_predict(gcn_net, merged_cells, device="cpu"):
         # Convert box to tensor
         box_tensor = torch.tensor(box, dtype=torch.float32)
 
-        texts.append(text_tensor)
-        boxes.append(box_tensor)
+        batch_texts.append(text_tensor)
+        batch_boxes.append(box_tensor)
+
+    # Create a single batch with all cells
+    boxes = [batch_boxes]  # List of lists of tensors
+    texts = [batch_texts]  # List of lists of tensors
 
     # Call the forward method with the correct arguments
     batch_scores = gcn_net.forward(boxes, texts)
 
-    return batch_scores, boxes
+    return batch_scores, batch_boxes
 
 
 @timer
