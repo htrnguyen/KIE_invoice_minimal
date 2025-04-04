@@ -179,21 +179,63 @@ def process_image(
     print(f"Processing image: {image_path}")
     print(f"Image size: {img.shape}")
 
-    # 1. Background subtraction
-    print("Step 1: Background subtraction...")
+    # 1. Background subtraction với bảo toàn thông tin
+    print("Step 1: Background processing...")
     mask_img = run_saliency(saliency_net, img)
-    img[~mask_img.astype(bool)] = 0.0
 
-    # 2. Image alignment
+    # Tạo bản sao của ảnh gốc
+    processed_img = img.copy()
+
+    # Thay vì xóa background, chỉ làm mờ nhẹ background
+    if len(img.shape) == 3:  # Ảnh màu
+        # Tạo mask 3 kênh màu
+        mask_3d = np.stack([mask_img] * 3, axis=2)
+        # Tạo ảnh blend giữa ảnh gốc và background trắng
+        white_bg = np.ones_like(img) * 255
+        alpha = 0.1  # Độ mờ của background (0.1 = giữ 90% background)
+        processed_img = np.where(
+            mask_3d.astype(bool), img, img * alpha + white_bg * (1 - alpha)
+        )
+    else:  # Ảnh grayscale
+        white_bg = np.ones_like(img) * 255
+        alpha = 0.1
+        processed_img = np.where(
+            mask_img.astype(bool), img, img * alpha + white_bg * (1 - alpha)
+        )
+
+    # 2. Image alignment với ảnh đã xử lý
     print("Step 2: Image alignment...")
-    warped_img = make_warp_img(img, mask_img)
+    warped_img = make_warp_img(processed_img, mask_img)
 
-    # 3 & 4. Text detection and recognition
+    # Kiểm tra chất lượng ảnh sau alignment
+    if warped_img is None or warped_img.size == 0:
+        print("Warning: Alignment failed. Using processed image...")
+        warped_img = processed_img
+
+    # 3 & 4. Text detection và recognition
     print("Step 3 & 4: Text detection and recognition...")
     cells, heatmap, textboxes = run_ocr(
         text_detector, text_recognizer, warped_img, cf.craft_config
     )
+
+    # Lọc bỏ các box có kích thước quá nhỏ hoặc quá lớn
+    filtered_cells = []
+    for cell in cells:
+        poly = np.array(cell["poly"]).reshape(-1, 2)
+        box_w = np.max(poly[:, 0]) - np.min(poly[:, 0])
+        box_h = np.max(poly[:, 1]) - np.min(poly[:, 1])
+        area = box_w * box_h
+        img_area = warped_img.shape[0] * warped_img.shape[1]
+
+        if 0.0001 * img_area < area < 0.1 * img_area:  # Lọc theo kích thước tương đối
+            filtered_cells.append(cell)
+
+    cells = filtered_cells
+
+    # Group text lines
     _, lines = get_group_text_line(heatmap, textboxes)
+
+    # Cập nhật group_id cho cells
     for line_id, cell in zip(lines, cells):
         cell["group_id"] = line_id
 
@@ -207,22 +249,50 @@ def process_image(
     print("Step 5: Key Information Extraction...")
     batch_scores, boxes = run_predict(gcn_net, merged_cells, device=cf.device)
 
-    # Post-process scores
+    # Post-process scores với confidence threshold
     values, preds = postprocess_scores(
-        batch_scores, score_ths=cf.score_ths, get_max=cf.get_max
+        batch_scores, score_ths=0.3, get_max=cf.get_max  # Tăng ngưỡng confidence
     )
-    kie_info = postprocess_write_info(merged_cells, preds)
+
+    # Lọc kết quả theo confidence
+    filtered_results = []
+    filtered_preds = []
+    filtered_values = []
+
+    for cell, pred, value in zip(merged_cells, preds, values):
+        if value >= 0.3:  # Chỉ giữ lại các kết quả có độ tin cậy cao
+            filtered_results.append(cell)
+            filtered_preds.append(pred)
+            filtered_values.append(value)
+
+    # Cập nhật kết quả đã lọc
+    kie_info = postprocess_write_info(filtered_results, filtered_preds)
 
     # Display results in JSON format
-    display_results_json(merged_cells, preds, values)
+    display_results_json(filtered_results, filtered_preds, filtered_values)
 
     # Visualize results
     print("Visualizing results...")
     visualize_results(
-        img, warped_img, mask_img, merged_cells, preds, values, boxes, output_path
+        img,
+        warped_img,
+        mask_img,
+        filtered_results,
+        filtered_preds,
+        filtered_values,
+        boxes,
+        output_path,
     )
 
-    return kie_info, img, warped_img, merged_cells, preds, values, boxes
+    return (
+        kie_info,
+        img,
+        warped_img,
+        filtered_results,
+        filtered_preds,
+        filtered_values,
+        boxes,
+    )
 
 
 def convert_warped_to_original_coords(warped_point, orig_img_shape, warped_img_shape):
