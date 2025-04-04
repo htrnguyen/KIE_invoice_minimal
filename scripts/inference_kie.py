@@ -266,8 +266,14 @@ def visualize_results(
     # Create figure and axes
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Hiển thị ảnh gốc
-    ax.imshow(orig_img)
+    # Hiển thị ảnh gốc - chuyển từ BGR sang RGB nếu cần
+    if len(orig_img.shape) == 3 and orig_img.shape[2] == 3:
+        # Kiểm tra xem ảnh có phải là BGR không
+        if orig_img[0, 0, 0] > orig_img[0, 0, 2]:  # Nếu kênh Blue > Red
+            orig_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
+
+    # Hiển thị ảnh với orientation đúng
+    ax.imshow(orig_img, aspect="equal")
 
     # Define colors for different labels
     colors = {
@@ -321,28 +327,15 @@ def visualize_results(
 
     # Save figure to file if output_path is provided
     if output_path:
-        # Lưu hình với kích thước gốc
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
-
-        # Đọc lại ảnh đã lưu và xoay nếu cần
-        saved_img = cv2.imread(output_path)
-        if saved_img is not None:
-            # Lấy kích thước ảnh gốc và ảnh đã lưu
-            orig_h, orig_w = orig_img.shape[:2]
-            saved_h, saved_w = saved_img.shape[:2]
-
-            # Kiểm tra hướng của ảnh gốc và ảnh đã lưu
-            orig_is_portrait = orig_h > orig_w
-            saved_is_portrait = saved_h > saved_w
-
-            # Xoay ảnh để khớp với hướng của ảnh gốc
-            if orig_is_portrait != saved_is_portrait:
-                # Xoay 90 độ theo chiều kim đồng hồ nếu cần
-                rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_CLOCKWISE)
-                cv2.imwrite(output_path, rotated_img)
-                print(f"Đã xoay và lưu ảnh tại: {output_path}")
-            else:
-                print(f"Ảnh đã được lưu tại: {output_path}")
+        # Lưu hình với orientation đúng
+        plt.savefig(
+            output_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0,
+            orientation="portrait",
+        )
+        print(f"Ảnh đã được lưu tại: {output_path}")
     else:
         # Try to display the figure
         try:
@@ -351,25 +344,14 @@ def visualize_results(
             print(f"Could not display figure: {e}")
             print("Saving to default location instead...")
             default_path = "visualization_result.png"
-            plt.savefig(default_path, dpi=300, bbox_inches="tight")
-
-            # Xoay ảnh nếu cần
-            saved_img = cv2.imread(default_path)
-            if saved_img is not None:
-                # Lấy kích thước ảnh gốc và ảnh đã lưu
-                orig_h, orig_w = orig_img.shape[:2]
-                saved_h, saved_w = saved_img.shape[:2]
-
-                # Kiểm tra hướng của ảnh gốc và ảnh đã lưu
-                orig_is_portrait = orig_h > orig_w
-                saved_is_portrait = saved_h > saved_w
-
-                # Xoay ảnh để khớp với hướng của ảnh gốc
-                if orig_is_portrait != saved_is_portrait:
-                    # Xoay 90 độ theo chiều kim đồng hồ nếu cần
-                    rotated_img = cv2.rotate(saved_img, cv2.ROTATE_90_CLOCKWISE)
-                    cv2.imwrite(default_path, rotated_img)
-                print(f"Visualization saved to: {default_path}")
+            plt.savefig(
+                default_path,
+                dpi=300,
+                bbox_inches="tight",
+                pad_inches=0,
+                orientation="portrait",
+            )
+            print(f"Visualization saved to: {default_path}")
 
     plt.close()
 
