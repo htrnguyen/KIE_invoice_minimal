@@ -249,6 +249,13 @@ def get_largest_poly_with_coord(mask_img, reshape=False):
     kernel = np.ones((3, 3), np.uint8)
     mask_img = cv2.dilate(mask_img, kernel, iterations=3)
     contours = cv2.findContours(mask_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
+
+    # If no contours found, return the image corners
+    if not contours:
+        h, w = mask_img.shape[:2]
+        point = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.int32)
+        return point
+
     # find the biggest countour (c) by the area
     c = max(contours, key=cv2.contourArea)
 
