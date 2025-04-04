@@ -6,6 +6,9 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 import argparse
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import random
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,6 +80,71 @@ def predict(model, boxes, texts, device="cpu"):
                 labels.append("UNKNOWN")
 
     return labels
+
+
+def visualize_results(image_path, boxes, texts, labels, true_labels=None):
+    """Visualize the predicted boxes and labels on the image"""
+    # Load image
+    img = Image.open(image_path)
+    img = np.array(img)
+
+    # Create figure and axes
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.imshow(img)
+
+    # Define colors for different labels
+    colors = {
+        "NAME": "red",
+        "BRAND": "blue",
+        "PRICE": "green",
+        "WEIGHT": "purple",
+        "WEIGHT_LABEL": "orange",
+        "OTHER": "gray",
+    }
+
+    # Draw boxes and labels
+    for i, (box, text, label) in enumerate(zip(boxes, texts, labels)):
+        # Convert box coordinates to polygon format
+        x_coords = [box[j] for j in range(0, len(box), 2)]
+        y_coords = [box[j] for j in range(1, len(box), 2)]
+
+        # Create polygon
+        polygon = patches.Polygon(
+            np.column_stack((x_coords, y_coords)),
+            linewidth=2,
+            edgecolor=colors.get(label, "white"),
+            facecolor="none",
+            alpha=0.7,
+        )
+        ax.add_patch(polygon)
+
+        # Add label text
+        if isinstance(text, list):
+            # If text is encoded, convert back to string
+            text_str = ""
+            for char_idx in text:
+                if char_idx < len(cf.alphabet):
+                    text_str += cf.alphabet[char_idx]
+        else:
+            text_str = text
+
+        # Add label text
+        label_text = f"{label}"
+        if true_labels and i < len(true_labels):
+            label_text += f" (True: {true_labels[i]})"
+
+        ax.text(
+            min(x_coords),
+            min(y_coords) - 10,
+            label_text,
+            color=colors.get(label, "white"),
+            fontsize=12,
+            bbox=dict(facecolor="black", alpha=0.7),
+        )
+
+    plt.axis("off")
+    plt.tight_layout()
+    plt.show()
 
 
 def main():
@@ -190,6 +258,9 @@ def main():
                 print(f"  Predicted label: {label}")
                 print("---------------------------------------------")
 
+            # Visualize results
+            visualize_results(image_path, boxes, [text1, text2, text3], labels)
+
         except Exception as e:
             print(f"Error processing image: {str(e)}")
             import traceback
@@ -239,6 +310,7 @@ def main():
             # Extract boxes and texts from annotation
             boxes = []
             texts = []
+            true_labels = []
             for box in annotation["boxes"]:
                 # Convert normalized coordinates back to pixel coordinates
                 coords = np.array(box["poly"], dtype=np.float32)
@@ -261,6 +333,9 @@ def main():
                     encoded.append(0)
                 texts.append(encoded)
 
+                # Store true label
+                true_labels.append(box["label"])
+
             # Perform inference
             labels = predict(model, boxes, texts)
 
@@ -274,6 +349,15 @@ def main():
                 print(f"  True label: {annotation['boxes'][i]['label']}")
                 print(f"  Predicted label: {label}")
                 print("------------------")
+
+            # Visualize results
+            visualize_results(
+                image_path,
+                boxes,
+                [box["text"] for box in annotation["boxes"]],
+                labels,
+                true_labels,
+            )
 
         except Exception as e:
             print(f"Error processing image: {str(e)}")
