@@ -268,20 +268,15 @@ def visualize_results(
         if orig_img[0, 0, 0] > orig_img[0, 0, 2]:  # Nếu kênh Blue > Red
             orig_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
 
-    # Xoay ảnh về đúng chiều dọc nếu đang nằm ngang
+    # Lấy kích thước ảnh
     h, w = orig_img.shape[:2]
-    rotated = False
-    if w > h:  # Nếu ảnh đang nằm ngang
-        orig_img = cv2.rotate(orig_img, cv2.ROTATE_90_CLOCKWISE)
-        rotated = True
 
-    # Create figure and axes với tỷ lệ phù hợp với ảnh
-    h, w = orig_img.shape[:2]
-    fig_width = 8
+    # Tạo figure với kích thước phù hợp
+    fig_width = 12
     fig_height = fig_width * (h / w)
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-    # Hiển thị ảnh
+    # Hiển thị ảnh với orientation đúng
     ax.imshow(orig_img)
 
     # Define colors for different labels
@@ -300,18 +295,7 @@ def visualize_results(
     # Draw boxes and labels
     for i, (cell, pred, value) in enumerate(zip(cells, preds, values)):
         # Get box coordinates
-        poly = cell["poly"].copy()  # Create a copy to avoid modifying original
-
-        if rotated:
-            # Xoay tọa độ 90 độ theo chiều kim đồng hồ
-            for j in range(0, len(poly), 2):
-                x, y = poly[j], poly[j + 1]
-                # Công thức chuyển đổi tọa độ khi xoay 90 độ CW:
-                # x_new = y
-                # y_new = h - x
-                poly[j] = y
-                poly[j + 1] = h - x
-
+        poly = cell["poly"]
         x_coords = [poly[j] for j in range(0, len(poly), 2)]
         y_coords = [poly[j] for j in range(1, len(poly), 2)]
 
@@ -335,14 +319,14 @@ def visualize_results(
 
         # Điều chỉnh vị trí text để không bị che khuất
         text_x = min(x_coords)
-        text_y = min(y_coords) - 5  # Giảm khoảng cách với box
+        text_y = min(y_coords) - 5
 
         ax.text(
             text_x,
             text_y,
             label_text,
             color=color,
-            fontsize=8,  # Giảm kích thước font
+            fontsize=8,
             bbox=dict(facecolor="white", alpha=0.7, edgecolor=color, pad=0.5),
             ha="left",
             va="bottom",
