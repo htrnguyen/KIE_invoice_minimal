@@ -424,6 +424,9 @@ class GatedGCNNet(nn.Module):
         else:
             h = dgl.mean_nodes(batch_graph, "feat")
 
+        # Đảm bảo h nằm trên cùng device với MLP_layer
+        h = h.to(device)
+
         # MLP layers
         h = self.MLP_layer(h)
 
