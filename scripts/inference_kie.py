@@ -85,39 +85,43 @@ def main():
         print(f"Error: Dataset directory not found at {dataset_path}")
         return
 
-    # Get list of images
+    # Load annotations first to find a valid image
+    annotation_path = "data/dataset/annotations/val.json"
+    if not os.path.exists(annotation_path):
+        print(f"Error: Annotation file not found at {annotation_path}")
+        return
+
+    with open(annotation_path, "r", encoding="utf-8") as f:
+        annotations = json.load(f)
+
+    # Find first image that exists in both annotations and images directory
     image_files = [
         f for f in os.listdir(dataset_path) if f.endswith((".jpg", ".png", ".jpeg"))
     ]
-    if not image_files:
-        print(f"Error: No images found in {dataset_path}")
+    valid_image = None
+    for image_file in image_files:
+        if any(ann["file_name"] == image_file for ann in annotations):
+            valid_image = image_file
+            break
+
+    if valid_image is None:
+        print("Error: No valid images found that have corresponding annotations")
         return
 
-    # Use the first image
-    image_path = os.path.join(dataset_path, image_files[0])
+    image_path = os.path.join(dataset_path, valid_image)
     print(f"Processing image: {image_path}")
 
     try:
         image, width, height = preprocess_image(image_path)
         print(f"Image size: {width}x{height}")
 
-        # Load corresponding annotation
-        annotation_path = "data/dataset/annotations/val.json"
-        if not os.path.exists(annotation_path):
-            print(f"Error: Annotation file not found at {annotation_path}")
-            return
-
-        with open(annotation_path, "r", encoding="utf-8") as f:
-            annotations = json.load(f)
-
         # Find annotation for this image
-        image_id = os.path.basename(image_path)
         annotation = next(
-            (ann for ann in annotations if ann["file_name"] == image_id), None
+            (ann for ann in annotations if ann["file_name"] == valid_image), None
         )
 
         if annotation is None:
-            print(f"Error: No annotation found for image {image_id}")
+            print(f"Error: No annotation found for image {valid_image}")
             return
 
         # Extract boxes and texts from annotation
