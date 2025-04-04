@@ -45,15 +45,27 @@ class GatedGCNLayer(nn.Module):
     Gated GCN layer for node and edge feature update
     """
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(
+        self, input_dim, output_dim, dropout=0.1, batch_norm=True, residual=True
+    ):
         super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.dropout = dropout
+        self.batch_norm = batch_norm
+        self.residual = residual
+
         self.A = nn.Linear(input_dim, output_dim)
         self.B = nn.Linear(input_dim, output_dim)
         self.C = nn.Linear(input_dim, output_dim)
         self.D = nn.Linear(input_dim, output_dim)
         self.E = nn.Linear(input_dim, output_dim)
-        self.bn_node_h = nn.BatchNorm1d(output_dim)
-        self.bn_node_e = nn.BatchNorm1d(output_dim)
+
+        if self.batch_norm:
+            self.bn_node_h = nn.BatchNorm1d(output_dim)
+            self.bn_node_e = nn.BatchNorm1d(output_dim)
+
+        self.dropout = nn.Dropout(dropout)
 
     def message_func(self, edges):
         Bh_j = edges.src["Bh"]
@@ -126,25 +138,36 @@ class GatedGCNLayer(nn.Module):
         e = g.edata["e"]
 
         # Tạo phiên bản CPU của batch norm
-        bn_node_h_cpu = nn.BatchNorm1d(self.bn_node_h.num_features)
-        bn_node_e_cpu = nn.BatchNorm1d(self.bn_node_e.num_features)
+        if self.batch_norm:
+            bn_node_h_cpu = nn.BatchNorm1d(self.bn_node_h.num_features)
+            bn_node_e_cpu = nn.BatchNorm1d(self.bn_node_e.num_features)
 
-        # Sao chép trọng số từ batch norm gốc
-        bn_node_h_cpu.weight.data = self.bn_node_h.weight.data.clone().to("cpu")
-        bn_node_h_cpu.bias.data = self.bn_node_h.bias.data.clone().to("cpu")
-        bn_node_h_cpu.running_mean = self.bn_node_h.running_mean.clone().to("cpu")
-        bn_node_h_cpu.running_var = self.bn_node_h.running_var.clone().to("cpu")
+            # Sao chép trọng số từ batch norm gốc
+            bn_node_h_cpu.weight.data = self.bn_node_h.weight.data.clone().to("cpu")
+            bn_node_h_cpu.bias.data = self.bn_node_h.bias.data.clone().to("cpu")
+            bn_node_h_cpu.running_mean = self.bn_node_h.running_mean.clone().to("cpu")
+            bn_node_h_cpu.running_var = self.bn_node_h.running_var.clone().to("cpu")
 
-        bn_node_e_cpu.weight.data = self.bn_node_e.weight.data.clone().to("cpu")
-        bn_node_e_cpu.bias.data = self.bn_node_e.bias.data.clone().to("cpu")
-        bn_node_e_cpu.running_mean = self.bn_node_e.running_mean.clone().to("cpu")
-        bn_node_e_cpu.running_var = self.bn_node_e.running_var.clone().to("cpu")
+            bn_node_e_cpu.weight.data = self.bn_node_e.weight.data.clone().to("cpu")
+            bn_node_e_cpu.bias.data = self.bn_node_e.bias.data.clone().to("cpu")
+            bn_node_e_cpu.running_mean = self.bn_node_e.running_mean.clone().to("cpu")
+            bn_node_e_cpu.running_var = self.bn_node_e.running_var.clone().to("cpu")
 
-        h = bn_node_h_cpu(h)
-        e = bn_node_e_cpu(e)
+            h = bn_node_h_cpu(h)
+            e = bn_node_e_cpu(e)
 
         h = F.relu(h)
         e = F.relu(e)
+
+        # Áp dụng dropout nếu cần
+        if self.dropout > 0:
+            h = self.dropout(h)
+            e = self.dropout(e)
+
+        # Áp dụng residual connection nếu cần
+        if self.residual and self.input_dim == self.output_dim:
+            h = h + h_cpu
+            e = e + e_cpu
 
         # Chuyển kết quả về device ban đầu
         h = h.to(h_device)
@@ -154,7 +177,7 @@ class GatedGCNLayer(nn.Module):
 
     def __repr__(self):
         return "{}(in_channels={}, out_channels={})".format(
-            self.__class__.__name__, self.in_channels, self.out_channels
+            self.__class__.__name__, self.input_dim, self.output_dim
         )
 
 
