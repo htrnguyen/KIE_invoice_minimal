@@ -281,7 +281,11 @@ def load_config():
 def main():
     # Set device to CPU since DGL doesn't support CUDA
     device = torch.device("cpu")
-    print(f"Using device: {device}")
+
+    # Suppress warnings
+    import warnings
+
+    warnings.filterwarnings("ignore")
 
     # Load config
     config = load_config()
@@ -303,6 +307,7 @@ def main():
         "in_feat_dropout": 0.1,
     }
 
+    print("Initializing model...")
     # Create model and move to device
     model = GatedGCNNet(net_params)
     model = model.to(device)
@@ -315,6 +320,7 @@ def main():
     checkpoint_dir = Path("weights/kie")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    print("Loading datasets...")
     # Load datasets
     train_dataset = KIEDataset("data/dataset/annotations/train.json")
     val_dataset = KIEDataset("data/dataset/annotations/val.json")
@@ -337,10 +343,11 @@ def main():
         weight_decay=1e-4,
     )
 
-    # Start training
-    logging.info("Starting training...")
+    print("\nStarting training...")
+    print("=" * 50)
     trainer.train(num_epochs=5, checkpoint_dir=checkpoint_dir)
-    logging.info("Training completed!")
+    print("\nTraining completed!")
+    print("=" * 50)
 
 
 if __name__ == "__main__":
