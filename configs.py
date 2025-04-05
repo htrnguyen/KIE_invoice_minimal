@@ -2,7 +2,7 @@ import os
 import torch
 
 # Paths
-saliency_weight_path = "weights/saliency/u2netp.pth"
+saliency_weight_path = "weights/saliency/u2net.pth"
 text_detection_weights_path = "weights/text_detect/craft_mlt_25k.pth"
 kie_weight_path = "weights/kie/vi_layoutxlm.pth"
 
