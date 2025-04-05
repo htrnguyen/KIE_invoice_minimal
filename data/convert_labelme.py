@@ -52,8 +52,12 @@ def get_image_dimensions(image_path: str, image_dir: str) -> tuple:
     # Tạo đường dẫn mới đến thư mục chứa ảnh
     new_image_path = os.path.join(image_dir, image_name)
 
-    with Image.open(new_image_path) as img:
-        return img.size
+    try:
+        with Image.open(new_image_path) as img:
+            return img.size
+    except (FileNotFoundError, IOError):
+        print(f"Không tìm thấy ảnh: {new_image_path}")
+        return None
 
 
 def convert_labelme_to_target(
@@ -64,7 +68,11 @@ def convert_labelme_to_target(
     image_name = os.path.basename(labelme_data["imagePath"])
 
     # Lấy kích thước ảnh gốc
-    w_origin, h_origin = get_image_dimensions(labelme_data["imagePath"], image_dir)
+    dimensions = get_image_dimensions(labelme_data["imagePath"], image_dir)
+    if dimensions is None:
+        return None  # Bỏ qua ảnh không tìm thấy
+
+    w_origin, h_origin = dimensions
 
     # Chuyển đổi shapes thành cells
     cells = []
@@ -104,10 +112,12 @@ def process_directory(input_dir: str, output_file: str, image_dir: str):
             # Chuyển đổi dữ liệu
             target_data = convert_labelme_to_target(labelme_data, image_dir)
 
-            # Thêm vào kết quả
-            all_data.update(target_data)
-
-            print(f"Đã xử lý file: {filename}")
+            # Chỉ thêm vào kết quả nếu target_data không phải None
+            if target_data is not None:
+                all_data.update(target_data)
+                print(f"Đã xử lý file: {filename}")
+            else:
+                print(f"Bỏ qua file: {filename} (không tìm thấy ảnh tương ứng)")
 
     # Lưu tất cả kết quả vào một file
     with open(output_file, "w", encoding="utf-8") as f:
@@ -116,13 +126,13 @@ def process_directory(input_dir: str, output_file: str, image_dir: str):
 
 def main():
     # Đường dẫn thư mục chứa các file labelme
-    input_dir = "./label"
+    input_dir = "./labels"
 
     # Đường dẫn thư mục chứa ảnh
     image_dir = "./images"
 
     # File output
-    output_file = "./preprocessed_data/processed_labels.json"
+    output_file = "./processed_labels.json"
 
     # Tạo thư mục output nếu chưa tồn tại
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

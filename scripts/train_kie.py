@@ -69,7 +69,30 @@ class KIEDataset(Dataset):
 
             boxes.append(coords)
             texts.append(self.encode_text(box["text"]))
-            label_idx = cf.node_labels.index(box["label"])
+
+            # Get the label and handle cases where it's not in the predefined list
+            label = box["label"]
+            if label not in cf.node_labels:
+                # If the label contains weight-related text, map it to "WEIGHT"
+                if any(
+                    weight_term in label.lower()
+                    for weight_term in ["kg", "g", "ml", "l", "oz"]
+                ):
+                    label = "WEIGHT"
+                # If the label contains date-related text, map it to appropriate category
+                elif any(
+                    date_term in label.lower()
+                    for date_term in ["nsx", "mfg", "sản xuất"]
+                ):
+                    label = "MFG"
+                elif any(
+                    date_term in label.lower() for date_term in ["hsd", "exp", "hạn"]
+                ):
+                    label = "EXP"
+                else:
+                    label = "OTHER"  # Default to OTHER for unrecognized labels
+
+            label_idx = cf.node_labels.index(label)
             labels.append(label_idx)
 
         return {
@@ -362,7 +385,7 @@ def main():
         train_loader=train_loader,
         val_loader=val_loader,
         device=device,
-        learning_rate=0.0001,  # Lower learning rate for fine-tuning
+        learning_rate=0.0001,
         weight_decay=1e-4,
     )
 
